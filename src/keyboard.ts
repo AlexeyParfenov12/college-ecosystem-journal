@@ -6,6 +6,8 @@ export type JournalKeyAction =
   | { type: 'grade'; value: MarkValue }
   | { type: 'attendance'; value: AttendanceStatus }
   | { type: 'details' }
+  | { type: 'delete' }
+  | { type: 'undo' }
   | { type: 'stop' }
 
 export interface JournalKeyInput {
@@ -18,41 +20,42 @@ export interface JournalKeyInput {
   repeat?: boolean
 }
 
+/** Russian semantic shortcuts: based on the entered character, not its physical US keyboard position. */
 export function interpretJournalKey(input: JournalKeyInput): JournalKeyAction | null {
+  const lower = input.key.toLocaleLowerCase('ru-RU')
+  if ((input.ctrlKey || input.metaKey) && !input.altKey && !input.shiftKey &&
+      (lower === 'z' || input.code === 'KeyZ') && !input.repeat) return { type: 'undo' }
   if (input.ctrlKey || input.metaKey || input.altKey) return null
   if (input.key === 'Escape') return { type: 'stop' }
   if (input.key === 'Enter' && !input.repeat) return { type: 'details' }
-  const arrowMap: Record<string, JournalKeyAction['type'] | string> = {
-    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
-  }
-  const direction = arrowMap[input.key]
-  if (direction) return { type: 'move', direction: direction as 'up' | 'down' | 'left' | 'right' }
-  // Do not create repeated grades/attendance when a key is held.
-  if (input.repeat || input.shiftKey) return null
-  if (/^[2-5]$/.test(input.key)) return { type: 'grade', value: input.key as MarkValue }
-  // Physical Latin-letter keys work with both English and Russian keyboard layouts.
-  // Cyrillic aliases are accepted for the symbols not conflicting with these keys.
-  const codes: Record<string, JournalKeyAction> = {
-    KeyN: { type: 'attendance', value: 'absent' },
-    KeyP: { type: 'attendance', value: 'present' },
-    KeyU: { type: 'attendance', value: 'excused' },
-    KeyL: { type: 'attendance', value: 'late' },
-    KeyZ: { type: 'grade', value: 'З' },
-    KeyX: { type: 'grade', value: 'НЗ' },
-  }
-  if (input.code && codes[input.code]) return codes[input.code]
+  if (input.key === 'ArrowUp') return { type:'move', direction:'up' }
+  if (input.key === 'ArrowDown') return { type:'move', direction:'down' }
+  if (input.key === 'ArrowLeft') return { type:'move', direction:'left' }
+  if (input.key === 'ArrowRight') return { type:'move', direction:'right' }
+  // No auto-repeated mutation on long key presses.
+  if (input.repeat) return null
+  if ((input.key === 'Backspace' || input.key === 'Delete') && !input.shiftKey)
+    return { type:'delete' }
+  if (input.shiftKey && (lower === 'з' || lower === 'z'))
+    return { type:'grade', value:'НЗ' }
+  if (input.shiftKey) return null
+  if (/^[2-5]$/.test(input.key)) return { type:'grade', value:input.key as MarkValue }
   const keys: Record<string, JournalKeyAction> = {
-    n: { type: 'attendance', value: 'absent' },
-    p: { type: 'attendance', value: 'present' },
-    u: { type: 'attendance', value: 'excused' },
-    l: { type: 'attendance', value: 'late' },
-    z: { type: 'grade', value: 'З' },
-    x: { type: 'grade', value: 'НЗ' },
-    'н': { type: 'attendance', value: 'absent' },
-    'у': { type: 'attendance', value: 'excused' },
-    'о': { type: 'attendance', value: 'late' },
+    'н': {type:'attendance',value:'absent'},
+    'п': {type:'attendance',value:'present'},
+    'у': {type:'attendance',value:'excused'},
+    'о': {type:'attendance',value:'late'},
+    'з': {type:'grade',value:'З'},
+    'б': {type:'grade',value:'НЗ'},
+    // Optional transliterated aliases for users with English keyboard layout.
+    'n': {type:'attendance',value:'absent'},
+    'p': {type:'attendance',value:'present'},
+    'u': {type:'attendance',value:'excused'},
+    'o': {type:'attendance',value:'late'},
+    'z': {type:'grade',value:'З'},
+    'b': {type:'grade',value:'НЗ'},
   }
-  return keys[input.key.toLowerCase()] ?? null
+  return keys[lower] ?? null
 }
 
 /** Move only across visible rows/columns. Bounds never wrap for arrow keys. */

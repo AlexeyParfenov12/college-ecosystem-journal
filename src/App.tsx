@@ -115,8 +115,10 @@ function App() {
   useEffect(() => {
     const filtered=lessons.filter(l=>l.journalId===journalId && (period==='all' || l.date.slice(0,7)===period))
     const count=screenBand==='phone'?1:screenBand==='tablet'?3:filtered.length
-    setDateStart(Math.max(0,filtered.length-count))
-  },[journalId,period,screenBand])
+    const latest=Math.max(0,filtered.length-count)
+    const target=brushMode?filtered.findIndex(l=>l.id===brushLessonId):-1
+    setDateStart(target>=0?Math.min(target,latest):latest)
+  },[journalId,period,screenBand,brushMode,brushLessonId])
   useEffect(() => {
     if (section !== 'journal' || journalLayout !== 'table') {
       setKeyboardMode(false)
@@ -272,6 +274,8 @@ function App() {
   }
 
   function openRollcall(lessonId: string) {
+    setBrushMode(false)
+    setBrushCells([])
     setRollcallLessonId(lessonId)
     setContextMenu(null)
     setSelected(null)
@@ -308,6 +312,8 @@ function App() {
     }
     const first=[...visibleLessons].reverse().find(l=>l.completed) ?? visibleLessons[0]
     const cell={studentId:visibleStudents[0].id,lessonId:first.id}
+    setBrushMode(false)
+    setBrushCells([])
     setKeyboardMode(true)
     setKeyboardCell(cell)
     keepLessonInView(first.id)
@@ -417,6 +423,7 @@ function App() {
   }
 
   function openCellMenu(studentId: string, lessonId: string, x: number, y: number) {
+    if(brushMode)closeBrush()
     setSelected(null)
     setContextMenu({ studentId, lessonId, x, y })
   }

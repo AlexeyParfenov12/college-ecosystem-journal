@@ -4,13 +4,16 @@ import {
   AlertCircle, ArrowDownToLine, BookOpenCheck, BookText, CalendarDays,
   CheckCircle2, ChevronDown, ClipboardList, CloudDownload, FileSpreadsheet,
   GraduationCap, Info, MonitorCheck, Pencil, Plus, Printer,
-  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X,
+  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound,
 } from 'lucide-react'
 import { categoryTitles, createDemoState, defaultPolicy, journals, lessons, students } from './demo'
 import { summarizeStudent } from './calculations'
 import { clearDemoState, loadDemoState, saveDemoState } from './storage'
+import { QuickAttendance } from './QuickAttendance'
+import { CellContextMenu } from './CellContextMenu'
+import { fillMissingPresent } from './quickAttendanceLogic'
 import type {
-  AttendanceStatus, DemoState, GradeCategory, GradeEntry, GradingPolicy, JournalView,
+  AttendanceEntry, AttendanceStatus, DemoState, GradeCategory, GradeEntry, GradingPolicy, JournalView,
   MarkValue, ReportKind, Section,
 } from './types'
 
@@ -64,6 +67,13 @@ function App() {
   const [lateMinutes, setLateMinutes] = useState(10)
   const [reportKind, setReportKind] = useState<ReportKind>('full')
   const [notice, setNotice] = useState('')
+  const [journalLayout, setJournalLayout] = useState<'lesson' | 'table'>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 980px)').matches ? 'lesson' : 'table')
+  const [focusLessonId, setFocusLessonId] = useState('j1-l6')
+  const [rollcallLessonId, setRollcallLessonId] = useState('j1-l6')
+  const [rollcallOpen, setRollcallOpen] = useState(false)
+  const [attendanceUndo, setAttendanceUndo] = useState<{ journalId: string; lessonId: string; before: AttendanceEntry[] } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ studentId: string; lessonId: string; x: number; y: number } | null>(null)
 
   useEffect(() => { saveDemoState(data) }, [data])
 
@@ -73,6 +83,10 @@ function App() {
   const visibleStudents = groupStudents.filter(s => s.name.toLowerCase().includes(search.trim().toLowerCase()))
   const journalLessons = useMemo(() => lessons.filter(l => l.journalId === journalId), [journalId])
   const visibleLessons = journalLessons.filter(l => period === 'all' || l.date.slice(0, 7) === period)
+  const focusLesson = visibleLessons.find(l => l.id === focusLessonId)
+    ?? [...visibleLessons].reverse().find(l => l.completed)
+    ?? visibleLessons[0]
+  const rollcallLesson = journalLessons.find(l => l.id === rollcallLessonId) ?? journalLessons[0]
   const completedHours = journalLessons.filter(l => l.completed).reduce((sum, l) => sum + l.hours, 0)
   const allSummaries = useMemo(() => Object.fromEntries(groupStudents.map(s => [
     s.id, summarizeStudent(s.id, journalLessons, data.grades, data.attendance, policy),
@@ -93,15 +107,59 @@ function App() {
   function updateCategoryWeight(category: GradeCategory, weight: number) {
     updatePolicy({ categoryWeights: { ...policy.categoryWeights, [category]: weight } })
   }
-  function setAttendance(studentId: string, lessonId: string, status: AttendanceStatus) {
+  function setAttendance(studentId: string, lessonId: string, status: AttendanceStatus, silent = false, minutes = lateMinutes) {
+    setAttendanceUndo(null)
     setData(old => ({
       ...old,
       attendance: [
         ...old.attendance.filter(a => !(a.studentId === studentId && a.lessonId === lessonId)),
-        { studentId, lessonId, status, ...(status === 'late' ? { lateMinutes: Math.max(1, lateMinutes) } : {}) },
+        { studentId, lessonId, status, ...(status === 'late' ? { lateMinutes: Math.max(1, minutes) } : {}) },
       ],
     }))
-    setNotice('Отметка посещаемости сохранена в демонстрации.')
+    if (!silent) setNotice('Отметка посещаемости сохранена в демонстрации.')
+  }
+
+  function openRollcall(lessonId: string) {
+    setRollcallLessonId(lessonId)
+    setContextMenu(null)
+    setSelected(null)
+    setRollcallOpen(true)
+  }
+
+  function fillAttendanceForLesson(lessonId: string) {
+    const preview = fillMissingPresent(data.attendance, groupStudents, lessonId)
+    if (!preview.added) {
+      setNotice('Все студенты уже отмечены. Существующие отметки не изменены.')
+      return
+    }
+    setAttendanceUndo({ journalId, lessonId, before: data.attendance })
+    setData(old => ({ ...old, attendance: fillMissingPresent(old.attendance, groupStudents, lessonId).attendance }))
+    setNotice('Добавлено присутствующих: ' + preview.added + '. Существующие пропуски и опоздания сохранены.')
+  }
+
+  function undoBulkAttendance() {
+    if (!attendanceUndo || attendanceUndo.journalId !== journalId) return
+    setData(old => ({ ...old, attendance: attendanceUndo.before }))
+    setAttendanceUndo(null)
+    setNotice('Массовое заполнение отменено.')
+  }
+
+  function addQuickGrade(studentId: string, lessonId: string, value: MarkValue) {
+    if ((value === 'З' || value === 'НЗ') ? !policy.passEnabled : !policy.numericEnabled) return
+    setData(old => ({
+      ...old,
+      grades: [...old.grades, {
+        id: 'quick-' + Date.now() + '-' + Math.random().toString(36).slice(2,8),
+        studentId, lessonId, value, category: 'classwork', source: 'manual',
+      }],
+    }))
+    setContextMenu(null)
+    setNotice('Оценка ' + value + ' добавлена вручную. Можно выставить несколько оценок за занятие.')
+  }
+
+  function openCellMenu(studentId: string, lessonId: string, x: number, y: number) {
+    setSelected(null)
+    setContextMenu({ studentId, lessonId, x, y })
   }
   function addGrade() {
     if (!selected) return
@@ -151,6 +209,9 @@ function App() {
     clearDemoState()
     setData(createDemoState())
     setSelected(null)
+    setRollcallOpen(false)
+    setContextMenu(null)
+    setAttendanceUndo(null)
     setNotice('Демонстрационные данные восстановлены.')
   }
   function rowsForReport(): { headers: string[]; rows: string[][] } {
@@ -208,7 +269,14 @@ function App() {
   }
   function changeJournal(id: string) {
     setJournalId(id)
+    const lastLesson = [...lessons].reverse().find(l => l.journalId === id && l.completed)?.id
+      ?? lessons.find(l => l.journalId === id)?.id ?? ''
+    setFocusLessonId(lastLesson)
+    setRollcallLessonId(lastLesson)
     setSelected(null)
+    setRollcallOpen(false)
+    setContextMenu(null)
+    setAttendanceUndo(null)
     setSearch('')
     setNotice('')
   }
@@ -258,23 +326,43 @@ function App() {
           {section === 'journal' && <>
             <div className="content-card">
               <div className="card-header">
-                <div><h2>Журнал группы <span>{journal.group}</span></h2><p>Единая таблица оценок и посещаемости. Нажмите на ячейку для ввода данных.</p></div>
-                <button className="outline-button" onClick={importLms}><CloudDownload size={16}/> Демо-импорт из LMS</button>
+                <div><h2>Журнал группы <span>{journal.group}</span></h2><p>Оценки и посещаемость в одном месте. ПК: правый клик на ячейке открывает быстрые действия.</p></div>
+                <div className="journal-header-actions">
+                  <button className="primary-button attendance-primary" onClick={() => focusLesson && openRollcall(focusLesson.id)} disabled={!focusLesson}>
+                    <UsersRound size={18}/> Быстрая перекличка
+                  </button>
+                  <button className="outline-button lms-import-button" onClick={importLms}><CloudDownload size={16}/> Демо-импорт из LMS</button>
+                </div>
               </div>
               <div className="toolbar">
                 <div className="filter-inline">
                   <label htmlFor="month-filter">Период</label>
                   <select id="month-filter" value={period} onChange={e => setPeriod(e.target.value)}><option value="all">Все занятия</option><option value="2026-10">Октябрь 2026</option><option value="2026-11">Ноябрь 2026</option></select>
                 </div>
-                <label className="search-box"><Search size={16}/><input aria-label="Поиск студента" value={search} onChange={e => setSearch(e.target.value)} placeholder="Найти студента..." /></label>
-                <div className="segmented" role="group" aria-label="Режим таблицы">
+                {journalLayout === 'table' && <label className="search-box"><Search size={16}/><input aria-label="Поиск студента" value={search} onChange={e => setSearch(e.target.value)} placeholder="Найти студента..." /></label>}
+                {journalLayout === 'table' && <div className="segmented" role="group" aria-label="Режим таблицы">
                   {([{value:'combined',label:'Всё вместе'},{value:'grades',label:'Оценки'},{value:'attendance',label:'Посещаемость'}] as {value:JournalView,label:string}[]).map(v =>
                     <button key={v.value} className={policy.personalView === v.value ? 'selected' : ''} onClick={() => updatePolicy({personalView:v.value})}>{v.label}</button>)}
-                </div>
+                </div>}
               </div>
-              <div className="table-scroll" tabIndex={0} aria-label="Таблица журнала, прокручивается горизонтально">
+              <div className="journal-view-bar">
+                <div className="journal-layout-options" role="group" aria-label="Отображение журнала">
+                  <button className={journalLayout === 'lesson' ? 'chosen' : ''} onClick={() => setJournalLayout('lesson')}><ListChecks size={16}/> По занятию</button>
+                  <button className={journalLayout === 'table' ? 'chosen' : ''} onClick={() => setJournalLayout('table')}><Table2 size={16}/> Таблица</button>
+                </div>
+                {journalLayout === 'lesson' && <label className="focus-lesson-select">
+                  <span>Дата занятия</span>
+                  <select value={focusLesson?.id ?? ''} onChange={e => setFocusLessonId(e.target.value)}>
+                    {visibleLessons.map(l => <option key={l.id} value={l.id}>{formatDate(l.date)} · {l.type}{l.completed ? '' : ' · в плане'}</option>)}
+                  </select>
+                </label>}
+              </div>
+              {journalLayout === 'table' && <div className="table-scroll" tabIndex={0} aria-label="Таблица журнала, прокручивается горизонтально">
                 <table className="journal-table">
-                  <thead><tr><th className="fixed-name">Фамилия и имя</th>{visibleLessons.map(l => <th key={l.id} className={'lesson-column ' + (l.completed ? '' : 'future')} title={l.topic}><div className="lesson-date">{formatDate(l.date)}</div><div className="lesson-type">{l.type === 'Практика' ? 'ПР' : l.type === 'Лабораторная' ? 'ЛР' : l.type === 'Контрольная' ? 'КР' : 'ЛК'}</div></th>)}<th className="summary-column">Ср. балл</th><th className="summary-column">Итог*</th></tr></thead>
+                  <thead><tr><th className="fixed-name">Фамилия и имя</th>{visibleLessons.map(l => <th key={l.id} className={'lesson-column ' + (l.completed ? '' : 'future')} title={l.topic}><button className="lesson-column-action" type="button" onClick={() => openRollcall(l.id)} title={'Перекличка за ' + formatDate(l.date)} aria-label={'Перекличка за ' + formatDate(l.date)}>
+                    <span className="lesson-date">{formatDate(l.date)}</span>
+                    <span className="lesson-type">{l.type === 'Практика' ? 'ПР' : l.type === 'Лабораторная' ? 'ЛР' : l.type === 'Контрольная' ? 'КР' : 'ЛК'}</span>
+                  </button></th>)}<th className="summary-column">Ср. балл</th><th className="summary-column">Итог*</th></tr></thead>
                   <tbody>
                     {visibleStudents.map((student, index) => {
                       const summary = allSummaries[student.id]
@@ -282,7 +370,11 @@ function App() {
                         {visibleLessons.map(l => {
                           const cellGrades=getGrades(student.id,l.id)
                           const attendance=getAttendance(student.id,l.id)
-                          return <td key={l.id} className="grid-cell"><button className={'cell-button ' + (selected?.studentId===student.id && selected?.lessonId===l.id?'cell-active':'')} onClick={() => setSelected({studentId:student.id,lessonId:l.id})} aria-label={'Изменить данные ' + student.name + ' за ' + formatDate(l.date)}>
+                          return <td key={l.id} className="grid-cell"><button className={'cell-button ' + (selected?.studentId===student.id && selected?.lessonId===l.id?'cell-active':'')}
+                            onClick={() => {setContextMenu(null);setSelected({studentId:student.id,lessonId:l.id})}}
+                            onContextMenu={e => {e.preventDefault();openCellMenu(student.id,l.id,e.clientX,e.clientY)}}
+                            onKeyDown={e => {if(e.key==='ContextMenu' || (e.shiftKey && e.key==='F10')){e.preventDefault();const r=e.currentTarget.getBoundingClientRect();openCellMenu(student.id,l.id,r.left+12,r.top+12)}}}
+                            aria-haspopup="dialog" aria-label={'Изменить данные ' + student.name + ' за ' + formatDate(l.date)} title="Левый клик — подробности, правый — быстрые действия">
                             {policy.personalView !== 'grades' && <span className={'attendance-mini ' + (attendance ? 'att-' + attendance.status : 'att-empty')} title={attendance ? attendanceInfo[attendance.status].label + (attendance.lateMinutes ? ' ' + attendance.lateMinutes + ' мин' : '') : 'Не отмечено'}>{attendance ? attendanceInfo[attendance.status].short : '·'}</span>}
                             {policy.personalView !== 'attendance' && <span className="cell-marks">{cellGrades.length ? cellGrades.map(g => <span key={g.id} className={'mark-badge mark-' + g.source} title={sourceInfo[g.source].label + ' · ' + categoryTitles[g.category]}>{g.value}</span>) : <span className="empty-mark">—</span>}</span>}
                           </button></td>
@@ -293,7 +385,19 @@ function App() {
                   </tbody>
                 </table>
                 {!visibleStudents.length && <p className="empty-state">По вашему запросу студенты не найдены.</p>}
-              </div>
+              </div>}
+              {journalLayout === 'lesson' && (focusLesson ? <QuickAttendance
+                key={focusLesson.id}
+                lesson={focusLesson}
+                students={groupStudents}
+                attendance={data.attendance}
+                grades={data.grades}
+                onSet={(studentId,status,minutes) => setAttendance(studentId,focusLesson.id,status,true,minutes)}
+                onFill={() => fillAttendanceForLesson(focusLesson.id)}
+                onUndo={undoBulkAttendance}
+                canUndo={attendanceUndo?.lessonId === focusLesson.id && attendanceUndo?.journalId === journalId}
+                onEdit={studentId => {setContextMenu(null);setSelected({studentId,lessonId:focusLesson.id})}}
+              /> : <p className="empty-state">Нет занятий за этот период.</p>)}
               <div className="table-foot">
                 <div className="legend"><span><i className="legend-dot manual"/>Ручная</span><span><i className="legend-dot auto"/>Автопроверка LMS</span><span><i className="legend-dot reviewed"/>Проверено в LMS</span><span className="legend-att">Н — отсутствие · У — уважительная причина · ОП — опоздание</span></div>
                 <span>* Предварительный расчёт, не аттестация</span>
@@ -339,6 +443,35 @@ function App() {
         </main>
       </div>
 
+      {contextMenu && (() => {
+        const s=groupStudents.find(v=>v.id===contextMenu.studentId)
+        const l=journalLessons.find(v=>v.id===contextMenu.lessonId)
+        if(!s||!l)return null
+        return <CellContextMenu
+          name={s.name} lessonLabel={formatDate(l.date)+' · '+l.type}
+          x={contextMenu.x} y={contextMenu.y}
+          numericEnabled={policy.numericEnabled} passEnabled={policy.passEnabled}
+          onClose={()=>setContextMenu(null)}
+          onAttendance={status=>{setAttendance(s.id,l.id,status,false,status==='late'?10:undefined);setContextMenu(null)}}
+          onMark={value=>addQuickGrade(s.id,l.id,value)}
+          onEdit={()=>{setSelected({studentId:s.id,lessonId:l.id});setContextMenu(null)}}
+          onRollcall={()=>openRollcall(l.id)}
+        />
+      })()}
+      {rollcallOpen && rollcallLesson && <div className="rollcall-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setRollcallOpen(false)}}>
+        <section className="rollcall-dialog" role="dialog" aria-modal="true" aria-label="Быстрая перекличка">
+          <QuickAttendance key={rollcallLesson.id} lesson={rollcallLesson} students={groupStudents}
+            lessonOptions={journalLessons} onSelectLesson={setRollcallLessonId}
+            attendance={data.attendance} grades={data.grades}
+            onSet={(studentId,status,minutes)=>setAttendance(studentId,rollcallLesson.id,status,true,minutes)}
+            onFill={()=>fillAttendanceForLesson(rollcallLesson.id)}
+            onUndo={undoBulkAttendance}
+            canUndo={attendanceUndo?.lessonId===rollcallLesson.id && attendanceUndo?.journalId===journalId}
+            onEdit={studentId=>{setSelected({studentId,lessonId:rollcallLesson.id});setRollcallOpen(false)}}
+            onClose={()=>setRollcallOpen(false)}
+          />
+        </section>
+      </div>}
       {selected && activeStudent && activeLesson && <div className="drawer-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSelected(null) }}>
         <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-heading">
           <div className="drawer-header"><div><div className="eyebrow">РЕДАКТИРОВАНИЕ ЗАНЯТИЯ</div><h2 id="drawer-heading">{activeStudent.name}</h2><p>{formatDate(activeLesson.date)} · {activeLesson.type}</p></div><button className="icon-button" onClick={()=>setSelected(null)} title="Закрыть"><X size={20}/></button></div>

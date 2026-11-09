@@ -4,7 +4,7 @@ import {
   AlertCircle, ArrowDownToLine, BookOpenCheck, BookText, CalendarDays,
   CheckCircle2, ChevronDown, ClipboardList, CloudDownload, FileSpreadsheet,
   GraduationCap, Info, MonitorCheck, Pencil, Plus, Printer,
-  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound, Keyboard, ArrowDown, ChevronLeft, ChevronRight,
+  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound, Keyboard, ArrowDown, ChevronLeft, ChevronRight, Paintbrush,
 } from 'lucide-react'
 import { categoryTitles, createDemoState, defaultPolicy, journals, lessons, students } from './demo'
 import { summarizeStudent } from './calculations'
@@ -14,6 +14,10 @@ import { CellContextMenu } from './CellContextMenu'
 import { fillMissingPresent } from './quickAttendanceLogic'
 import { advanceJournalCell, interpretJournalKey, moveJournalCell } from './keyboard'
 import { removeLastManualGrade } from './gradeActions'
+import { BrushPanel } from './BrushPanel'
+import { FeaturedLesson } from './FeaturedLesson'
+import { applyBrush, brushKey, pickFeaturedLesson, undoBrush } from './brush'
+import type { BrushTarget, BrushTool, BrushChange } from './brush'
 import type {
   AttendanceEntry, AttendanceStatus, DemoState, GradeCategory, GradeEntry, GradingPolicy, JournalView,
   MarkValue, ReportKind, Section,
@@ -88,9 +92,21 @@ function App() {
     return window.innerWidth<620?'phone':window.innerWidth<1180?'tablet':'desktop'
   })
   const [dateStart, setDateStart] = useState(0)
+  const [brushMode, setBrushMode] = useState(false)
+  const [brushTool, setBrushTool] = useState<BrushTool>({kind:'attendance',status:'absent'})
+  const [brushCells, setBrushCells] = useState<BrushTarget[]>([])
+  const [brushLessonId, setBrushLessonId] = useState('j1-l6')
+  const [brushUndo, setBrushUndo] = useState<{journalId:string;changes:BrushChange[]}|null>(null)
+  const lastPointerType = useRef('')
   const gridRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { saveDemoState(data) }, [data])
+  useEffect(() => {
+    if(section!=='journal' || journalLayout!=='table') {
+      setBrushMode(false)
+      setBrushCells([])
+    }
+  },[section,journalLayout])
   useEffect(() => {
     const resize=()=>setScreenBand(window.innerWidth<620?'phone':window.innerWidth<1180?'tablet':'desktop')
     window.addEventListener('resize',resize)
@@ -122,6 +138,9 @@ function App() {
   const groupStudents = useMemo(() => students.filter(s => s.journalId === journalId), [journalId])
   const visibleStudents = groupStudents.filter(s => s.name.toLowerCase().includes(search.trim().toLowerCase()))
   const journalLessons = useMemo(() => lessons.filter(l => l.journalId === journalId), [journalId])
+  const now=new Date()
+  const todayIso=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')
+  const featuredLesson=pickFeaturedLesson(journalLessons,todayIso)
   const visibleLessons = journalLessons.filter(l => period === 'all' || l.date.slice(0, 7) === period)
   const dateWindowSize=screenBand==='phone'?1:screenBand==='tablet'?3:visibleLessons.length
   const maxDateStart=Math.max(0,visibleLessons.length-dateWindowSize)
@@ -174,6 +193,82 @@ function App() {
       ],
     }))
     if (!silent) setNotice('Отметка посещаемости сохранена в демонстрации.')
+  }
+
+  function openBrush(lessonId?:string) {
+    const chosen=lessonId ?? focusLesson?.id ?? journalLessons[0]?.id
+    if(!chosen)return
+    setBrushLessonId(chosen)
+    setBrushCells([])
+    setBrushTool({kind:'attendance',status:'absent'})
+    setKeyboardMode(false)
+    setSelected(null)
+    setContextMenu(null)
+    setRollcallOpen(false)
+    setJournalLayout('table')
+    setPeriod('all')
+    setBrushMode(true)
+    const index=journalLessons.findIndex(l=>l.id===chosen)
+    const count=screenBand==='phone'?1:screenBand==='tablet'?3:journalLessons.length
+    setDateStart(Math.max(0,Math.min(index,journalLessons.length-count)))
+    setNotice('Кисточка включена. Выберите отметку, затем ячейки и подтвердите изменения.')
+  }
+
+  function closeBrush() {
+    setBrushMode(false)
+    setBrushCells([])
+  }
+
+  function selectBrushCell(cell:BrushTarget, onlyAdd=false) {
+    setBrushCells(prev=>{
+      const key=brushKey(cell)
+      const exists=prev.some(p=>brushKey(p)===key)
+      if(exists)return onlyAdd?prev:prev.filter(p=>brushKey(p)!==key)
+      return [...prev,cell]
+    })
+    setLastCell(cell)
+  }
+
+  function setBrushToolAndClear(value:BrushTool) {
+    setBrushTool(value)
+    setBrushCells([])
+  }
+
+  function selectBrushGroupForLesson() {
+    if(!journalLessons.some(l=>l.id===brushLessonId))return
+    setBrushCells(visibleStudents.map(s=>({studentId:s.id,lessonId:brushLessonId})))
+    keepLessonInView(brushLessonId)
+  }
+
+  function applyBrushSelection() {
+    const valid=brushCells.filter(cell=>
+      groupStudents.some(s=>s.id===cell.studentId) &&
+      journalLessons.some(l=>l.id===cell.lessonId))
+    if(!valid.length) {setNotice('Выделите ячейки для группового ввода.');return}
+    if(brushTool.kind==='grade' && ((brushTool.value==='З'||brushTool.value==='НЗ')
+      ? !policy.passEnabled : !policy.numericEnabled)) {
+      setNotice('Этот тип оценки запрещён текущими настройками.');return
+    }
+    const result=applyBrush(data,valid,brushTool,()=> 'brush-'+crypto.randomUUID())
+    if(!result.changes.length) {
+      setBrushCells([])
+      setNotice('Данные уже соответствуют выбранной отметке, изменений нет.')
+      return
+    }
+    setData(result.next)
+    setBrushUndo({journalId,changes:result.changes})
+    setKeyboardUndo(null)
+    setAttendanceUndo(null)
+    setBrushCells([])
+    setNotice('Кисточка: '+result.addedGrades+' оценок добавлено, '+result.changedAttendance+
+      ' отметок посещаемости изменено. При необходимости отмените эту операцию.')
+  }
+
+  function undoBrushSelection() {
+    if(!brushUndo || brushUndo.journalId!==journalId)return
+    setData(old=>undoBrush(old,brushUndo.changes))
+    setBrushUndo(null)
+    setNotice('Последняя операция кисточки отменена. Другие данные не изменены.')
   }
 
   function openRollcall(lessonId: string) {
@@ -381,6 +476,9 @@ function App() {
     setRollcallOpen(false)
     setContextMenu(null)
     setAttendanceUndo(null)
+    setBrushMode(false)
+    setBrushCells([])
+    setBrushUndo(null)
     setNotice('Демонстрационные данные восстановлены.')
   }
   function rowsForReport(): { headers: string[]; rows: string[][] } {
@@ -449,6 +547,9 @@ function App() {
     setKeyboardMode(false)
     setKeyboardCell(null)
     setKeyboardUndo(null)
+    setBrushMode(false)
+    setBrushCells([])
+    setBrushUndo(null)
     setLastCell(null)
     setHoveredCell(null)
     setKeyboardFeedback('')

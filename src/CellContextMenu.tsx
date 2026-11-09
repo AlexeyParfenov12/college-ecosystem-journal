@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Pencil, UsersRound, X } from 'lucide-react'
+import { Pencil, Trash2, UsersRound, X } from 'lucide-react'
 import type { AttendanceStatus, MarkValue } from './types'
 
 type Props={
@@ -12,6 +12,8 @@ type Props={
   onAttendance:(status:AttendanceStatus)=>void
   onMark:(value:MarkValue)=>void
   onEdit:()=>void
+  onDelete:()=>void
+  canDeleteManual:boolean
   onRollcall:()=>void
   onClose:()=>void
 }
@@ -22,7 +24,7 @@ const flags: {status:AttendanceStatus;label:string;short:string}[]=[
   {status:'excused',label:'Уважительная причина',short:'У'},
 ]
 
-export function CellContextMenu({name,lessonLabel,x,y,numericEnabled,passEnabled,onAttendance,onMark,onEdit,onRollcall,onClose}:Props){
+export function CellContextMenu({name,lessonLabel,x,y,numericEnabled,passEnabled,onAttendance,onMark,onEdit,onDelete,canDeleteManual,onRollcall,onClose}:Props){
   const ref=useRef<HTMLDivElement>(null)
   useEffect(()=>{
     function onOutside(e:MouseEvent){if(!ref.current?.contains(e.target as Node))onClose()}
@@ -44,6 +46,10 @@ export function CellContextMenu({name,lessonLabel,x,y,numericEnabled,passEnabled
       {(['2','3','4','5','З','НЗ'] as MarkValue[]).map(value=><button key={value} disabled={value==='З'||value==='НЗ'?!passEnabled:!numericEnabled} onClick={()=>onMark(value)}>{value}</button>)}
     </div>
     <button className="context-action" onClick={onEdit}><Pencil size={16}/> Подробнее / несколько оценок</button>
+    <button className="context-action context-delete" onClick={onDelete} disabled={!canDeleteManual}
+      title={canDeleteManual?'Удалить последнюю оценку преподавателя':'Нет ручных оценок. Результаты LMS защищены'}>
+      <Trash2 size={16}/> Удалить последнюю ручную оценку
+    </button>
     <button className="context-action" onClick={onRollcall}><UsersRound size={16}/> Перекличка всей группы</button>
   </div>
 }

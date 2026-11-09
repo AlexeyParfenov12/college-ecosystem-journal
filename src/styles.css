@@ -4,3 +4,110 @@
 @media(max-width:1180px){.sidebar{width:225px;flex-basis:225px}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.journal-selector{align-items:flex-start;flex-direction:column;gap:12px}.selected-meta{gap:10px 19px}.settings-grid{grid-template-columns:1fr}.right-settings{display:grid;grid-template-columns:1fr 1fr;gap:13px}.right-settings .content-card{margin-bottom:0}.right-settings .content-card:last-child{grid-column:1/-1}}
 @media(max-width:760px){.app-shell{display:block}.sidebar{width:100%;height:auto;position:static;border-right:0;border-bottom:1px solid #dce7e2}.brand{padding:13px 16px}.sidebar-bottom,.workspace-label,.nav-body small{display:none}.nav-list{display:flex;overflow-x:auto;gap:3px;padding:0 8px 8px}.nav-item{padding:9px 12px;white-space:nowrap}.nav-icon{display:none}.nav-body strong{font-size:10px}.topbar{padding:0 15px;height:50px}.breadcrumbs{font-size:10px}.year-pill{display:none}.content{padding:19px 12px}.page-heading{align-items:flex-start}.page-heading h1{font-size:23px}.page-heading p{font-size:11px}.page-heading .ghost-button{font-size:0;padding:9px}.page-heading .ghost-button svg{width:17px;height:17px}.journal-selector{padding:12px}.select-wrap{min-width:0;width:100%}.kpi-grid{gap:8px}.kpi{min-height:90px;padding:12px;gap:8px}.kpi-icon{width:29px;height:29px;flex-basis:29px}.kpi strong{font-size:19px}.kpi em{font-size:12px}.content-card{padding:12px}.card-header{flex-wrap:wrap}.toolbar{align-items:stretch}.search-box{max-width:none}.segmented{width:100%;margin-left:0}.segmented button{flex:1;padding:9px 6px}.table-foot{flex-direction:column;align-items:flex-start}.bottom-hint{align-items:flex-start}.right-settings{display:block}.right-settings .content-card{margin-bottom:12px}.report-controls .select-wrap{min-width:0}.report-controls button{flex:1}.app-footer{flex-wrap:wrap}.document-preview{padding:13px}.journal-table th.fixed-name{min-width:156px;font-size:10px}.drawer-header{padding:18px}.drawer-content{padding:16px 18px}}
 @media print{@page{size:A4 landscape;margin:12mm}body{background:#fff!important;color:#000!important;font:10pt Arial,sans-serif}.sidebar,.main-area,.drawer-backdrop{display:none!important}.print-sheet{display:block!important;width:100%;color:#000}.print-sheet h1{font-size:16pt}.print-sheet p{font-size:9pt}.print-sheet table{border-collapse:collapse;width:100%;font-size:8pt;table-layout:auto}.print-sheet th,.print-sheet td{border:1px solid #555;padding:4px 5px;word-break:break-word}.print-sheet th{background:#eee}.print-sheet tr{break-inside:avoid}}
+
+
+/* Mobile/tablet lesson view and quick-rollcall UX */
+.journal-header-actions{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+.journal-view-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 15px}
+.journal-layout-options{display:flex;gap:3px;padding:4px;border:1px solid #dcebe2;border-radius:10px;background:#f5f8f5}
+.journal-layout-options button{border:0;border-radius:7px;background:transparent;display:flex;align-items:center;gap:7px;padding:10px 12px;font-size:11px;font-weight:800;color:#718981;min-height:42px}
+.journal-layout-options button.chosen{background:#0d625b;color:#fff;box-shadow:0 2px 6px #0d625b28}
+.focus-lesson-select{display:flex;align-items:center;gap:9px;font-size:11px;font-weight:700;color:#5c776e}
+.focus-lesson-select select,.rollcall-date-control select{border:1px solid #d3e3d9;border-radius:8px;color:#255b52;background:white;padding:11px;max-width:100%;min-height:44px}
+.lesson-column-action{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:0;background:none;width:100%;padding:4px;color:inherit;border-radius:5px}
+.lesson-column-action:hover{background:#d7ede2}
+.quick-attendance{min-width:0}
+.rollcall-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.rollcall-heading h3{font-size:15px;line-height:1.4;color:#164f50;margin:0 0 5px}
+.rollcall-heading p{font-size:11px;color:#849891;margin:0;line-height:1.6}
+.rollcall-date-control{display:flex;gap:8px;align-items:center;margin:14px 0;font-size:11px;color:#51756b}
+.rollcall-date-control select{min-width:0;flex:1}
+.rollcall-summary{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;font-size:11px;font-weight:800;color:#49766b;background:#eff7f1;border-radius:9px;padding:11px 12px}
+.rollcall-summary span{display:flex;align-items:center;gap:5px}
+.rollcall-progress{height:7px;background:#e8efe9;border-radius:10px;margin:10px 0 15px;overflow:hidden}
+.rollcall-progress span{display:block;height:100%;background:#5bb694;border-radius:10px;transition:width .18s}
+.rollcall-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.rollcall-bulk .primary-button{min-height:46px}
+.rollcall-safe{display:flex;align-items:center;gap:7px;color:#8aa098;font-size:10px;margin:9px 0 22px}
+.rollcall-tool-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#325d57;font-size:11px;margin-bottom:9px}
+.rollcall-tool-heading span{color:#9caea5;font-size:10px}
+.rollcall-tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-bottom:16px}
+.rollcall-tools button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;border:1px solid #dce9e1;border-radius:9px;background:#fff;color:#6d847a;padding:8px 5px;min-height:51px;font-size:10px}
+.rollcall-tools button strong{font-size:15px;color:#426b60}
+.rollcall-tools button.active{border:2px solid #0d9080;background:#e4f5ed;color:#126e5c}
+.rollcall-tools button.active strong{color:#126e5c}
+.rollcall-minutes{display:flex;align-items:center;gap:12px;font-size:11px;color:#426f62;margin:-5px 0 16px}
+.rollcall-minutes input{border:1px solid #cfe3d7;border-radius:7px;padding:9px;min-height:44px;width:75px}
+.rollcall-student-list{border:1px solid #dce8e0;border-radius:10px;overflow:hidden}
+.rollcall-student-row{display:flex;align-items:stretch;gap:0;border-bottom:1px solid #e9f0ea;background:#fff;min-width:0}
+.rollcall-student-row:nth-child(even){background:#fbfcfa}
+.rollcall-student-row:last-child{border-bottom:0}
+.rollcall-person{border:0;background:transparent;display:flex;align-items:center;gap:10px;text-align:left;padding:12px 10px;color:#254d46;min-width:0;flex:1;min-height:62px}
+.rollcall-person:hover,.rollcall-grade-edit:hover{background:#eaf8f0}
+.rollcall-number{font-size:10px;color:#8aaca0;width:19px;flex-shrink:0;text-align:center}
+.rollcall-student-name{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:800;min-width:0;line-height:1.25}
+.rollcall-student-name small{font-size:10px;font-weight:500;color:#9aa9a1;line-height:1.35}
+.rollcall-state{margin-left:auto;border-radius:7px;min-width:39px;height:34px;display:grid;place-items:center;font-size:12px;font-weight:900;flex-shrink:0}
+.rollcall-state.state-present{background:#e1f6e7;color:#268e5e}
+.rollcall-state.state-absent{background:#fce6e2;color:#b95b4f}
+.rollcall-state.state-late{background:#fff0d5;color:#b27a1f}
+.rollcall-state.state-excused{background:#faeddb;color:#b28643}
+.rollcall-state.state-empty{background:#f0f5f2;color:#a6b8ae}
+.rollcall-grade-edit{display:flex;align-items:center;justify-content:center;gap:4px;border:0;border-left:1px solid #e9f0ea;background:transparent;color:#427e73;font-size:12px;font-weight:800;min-width:53px;padding:0 9px}
+.rollcall-backdrop{position:fixed;inset:0;background:#0c293b67;z-index:28;display:flex;align-items:center;justify-content:center;padding:16px}
+.rollcall-dialog{background:#fff;border-radius:14px;width:min(640px,100%);max-height:min(780px,95dvh);overflow-y:auto;box-shadow:0 20px 60px #133f4136;padding:22px;overscroll-behavior:contain}
+.cell-context-menu{position:fixed;width:276px;max-height:min(425px,calc(100dvh - 16px));overflow-y:auto;background:white;border:1px solid #c7dfd2;border-radius:11px;box-shadow:0 13px 42px #174c4930;z-index:60;padding:8px;overscroll-behavior:contain}
+.cell-context-heading{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;padding:8px 6px 12px;border-bottom:1px solid #e8efe9}
+.cell-context-heading>div{display:flex;flex-direction:column;gap:4px}
+.cell-context-heading strong{font-size:11px;color:#265951}
+.cell-context-heading small{font-size:10px;color:#839c8e}
+.context-section-label{font-size:10px;font-weight:800;color:#799487;padding:11px 5px 6px}
+.context-attendance{display:grid;grid-template-columns:repeat(2,1fr);gap:5px}
+.context-attendance button{display:flex;align-items:center;gap:7px;border:1px solid #e5eee7;background:#f9fcf9;border-radius:7px;padding:8px 7px;color:#526f65;text-align:left;font-size:9px;min-height:42px}
+.context-attendance button:hover,.context-marks button:hover,.context-action:hover{background:#e5f5eb;border-color:#90c8a9}
+.context-attendance button strong{font-size:13px;color:#21765e;width:20px;text-align:center}
+.context-marks{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.context-marks button{min-height:39px;border:1px solid #e0ebe3;border-radius:6px;background:#f7faf7;color:#245b50;font-weight:800;font-size:12px}
+.context-action{display:flex;align-items:center;gap:9px;padding:11px 7px;width:100%;background:transparent;border:0;border-radius:6px;color:#3d675c;font-size:11px;text-align:left;margin-top:5px}
+@media(min-width:761px) and (max-width:1100px){
+.sidebar{width:78px;flex-basis:78px}
+.brand{justify-content:center;padding:22px 6px}.brand>div:nth-child(2){display:none}
+.workspace-label,.sidebar-bottom,.nav-body{display:none}
+.nav-list{padding:0 8px}.nav-item{justify-content:center;padding:14px 6px;min-height:50px}
+.nav-icon{display:flex}.nav-accent{right:-1px}
+.content{padding:22px 19px}
+.journal-header-actions{justify-content:flex-start}
+}
+@media(max-width:760px){
+.content{padding:15px 10px}
+.content-card{border-radius:11px}
+.journal-header-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}
+.journal-header-actions button{min-width:0;white-space:normal;line-height:1.4;padding:9px 7px;min-height:48px}
+.journal-view-bar{display:grid;grid-template-columns:1fr;align-items:stretch}
+.journal-layout-options{width:100%}
+.journal-layout-options button{flex:1;justify-content:center}
+.focus-lesson-select{display:flex;justify-content:space-between}
+.focus-lesson-select span{white-space:nowrap}
+.focus-lesson-select select{flex:1;width:40px;max-width:100%}
+.quick-attendance .rollcall-student-list{margin-left:-4px;margin-right:-4px}
+.rollcall-backdrop{padding:0;align-items:stretch}
+.rollcall-dialog{max-width:100%;width:100%;height:100dvh;max-height:100dvh;overflow:auto;border-radius:0;padding:18px 14px calc(20px + env(safe-area-inset-bottom))}
+.rollcall-summary{justify-content:space-between}
+.rollcall-tools button{min-height:58px}
+.rollcall-person{min-height:64px}
+.attendance-primary{font-size:11px}
+.cell-context-menu{max-width:calc(100vw - 16px)}
+.drawer{padding-bottom:env(safe-area-inset-bottom)}
+.topbar-actions{gap:7px}
+.demo-pill{padding:6px 8px}
+.journal-selector{gap:9px}
+}
+@media(max-width:380px){
+.journal-header-actions{grid-template-columns:1fr}
+.rollcall-person{gap:6px;padding:10px 7px}
+.rollcall-student-name{font-size:11px}
+.rollcall-grade-edit{min-width:46px}
+.rollcall-tools{gap:4px}
+.rollcall-tools button{font-size:9px}
+}
+@media print{.rollcall-backdrop,.cell-context-menu{display:none!important}}

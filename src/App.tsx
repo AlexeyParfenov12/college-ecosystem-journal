@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import {
   AlertCircle, ArrowDownToLine, BookOpenCheck, BookText, CalendarDays,
   CheckCircle2, ChevronDown, ClipboardList, CloudDownload, FileSpreadsheet,
   GraduationCap, Info, MonitorCheck, Pencil, Plus, Printer,
-  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound,
+  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound, Keyboard, ArrowDown,
 } from 'lucide-react'
 import { categoryTitles, createDemoState, defaultPolicy, journals, lessons, students } from './demo'
 import { summarizeStudent } from './calculations'
@@ -12,6 +12,7 @@ import { clearDemoState, loadDemoState, saveDemoState } from './storage'
 import { QuickAttendance } from './QuickAttendance'
 import { CellContextMenu } from './CellContextMenu'
 import { fillMissingPresent } from './quickAttendanceLogic'
+import { advanceJournalCell, interpretJournalKey, moveJournalCell } from './keyboard'
 import type {
   AttendanceEntry, AttendanceStatus, DemoState, GradeCategory, GradeEntry, GradingPolicy, JournalView,
   MarkValue, ReportKind, Section,
@@ -74,8 +75,28 @@ function App() {
   const [rollcallOpen, setRollcallOpen] = useState(false)
   const [attendanceUndo, setAttendanceUndo] = useState<{ journalId: string; lessonId: string; before: AttendanceEntry[] } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ studentId: string; lessonId: string; x: number; y: number } | null>(null)
+  const [keyboardMode, setKeyboardMode] = useState(false)
+  const [keyboardCell, setKeyboardCell] = useState<SelectedCell | null>(null)
+  const [autoAdvance, setAutoAdvance] = useState(true)
+  const [keyboardFeedback, setKeyboardFeedback] = useState('')
+  const gridRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { saveDemoState(data) }, [data])
+  useEffect(() => {
+    if (section !== 'journal' || journalLayout !== 'table') {
+      setKeyboardMode(false)
+      setKeyboardFeedback('')
+    }
+  }, [section, journalLayout])
+  useEffect(() => {
+    if (!keyboardMode || !keyboardCell || !gridRef.current) return
+    const element = Array.from(gridRef.current.querySelectorAll<HTMLButtonElement>('.cell-button'))
+      .find(node => node.dataset.studentId === keyboardCell.studentId && node.dataset.lessonId === keyboardCell.lessonId)
+    element?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [keyboardMode, keyboardCell, period])
+  useEffect(() => {
+    if (keyboardMode && !selected && !contextMenu && !rollcallOpen) gridRef.current?.focus()
+  }, [keyboardMode, selected, contextMenu, rollcallOpen])
 
   const journal = journals.find(j => j.id === journalId) ?? journals[0]
   const policy = data.policies[journalId] ?? defaultPolicy
@@ -142,6 +163,78 @@ function App() {
     setData(old => ({ ...old, attendance: attendanceUndo.before }))
     setAttendanceUndo(null)
     setNotice('Массовое заполнение отменено.')
+  }
+
+  function toggleKeyboardMode() {
+    if (keyboardMode) {
+      setKeyboardMode(false)
+      setKeyboardFeedback('')
+      return
+    }
+    if (!visibleStudents.length || !visibleLessons.length) {
+      setNotice('Для быстрого ввода нужно выбрать период со студентами и занятиями.')
+      return
+    }
+    const firstLesson = [...visibleLessons].reverse().find(l => l.completed) ?? visibleLessons[0]
+    setKeyboardMode(true)
+    setKeyboardCell({ studentId: visibleStudents[0].id, lessonId: firstLesson.id })
+    setSelected(null)
+    setContextMenu(null)
+    setKeyboardFeedback('Выберите ячейку стрелками или щелчком мыши, затем нажмите оценку или отметку.')
+    window.requestAnimationFrame(() => gridRef.current?.focus())
+  }
+
+  function handleJournalKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!keyboardMode || selected || contextMenu || rollcallOpen) return
+    const target = event.target as HTMLElement
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return
+    // Avoid intercepting keys when a column header or unrelated control is focused.
+    if (target !== event.currentTarget && !target.closest('.cell-button')) return
+    const action = interpretJournalKey(event)
+    if (!action) return
+    event.preventDefault()
+    if (action.type === 'stop') {
+      setKeyboardMode(false)
+      setKeyboardFeedback('')
+      return
+    }
+    if (!visibleStudents.length || !visibleLessons.length) return
+    const initial = {
+      studentId: visibleStudents[0].id,
+      lessonId: visibleLessons[0].id,
+    }
+    const candidate = keyboardCell && visibleStudents.some(s=>s.id===keyboardCell.studentId)
+      && visibleLessons.some(l=>l.id===keyboardCell.lessonId)
+      ? keyboardCell : initial
+    const row = Math.max(0,visibleStudents.findIndex(s=>s.id===candidate.studentId))
+    const column = Math.max(0,visibleLessons.findIndex(l=>l.id===candidate.lessonId))
+    if (action.type === 'move') {
+      const next = moveJournalCell({row,column},action.direction,visibleStudents.length,visibleLessons.length)
+      setKeyboardCell({studentId:visibleStudents[next.row].id,lessonId:visibleLessons[next.column].id})
+      return
+    }
+    if (action.type === 'details') {
+      setSelected(candidate)
+      return
+    }
+    if (action.type === 'grade') {
+      if ((action.value==='З'||action.value==='НЗ') ? !policy.passEnabled : !policy.numericEnabled) {
+        setKeyboardFeedback('Эта шкала отключена в настройках выбранного журнала.')
+        return
+      }
+      addQuickGrade(candidate.studentId,candidate.lessonId,action.value)
+      setKeyboardFeedback('Добавлена оценка '+action.value+' · '+visibleStudents[row].name)
+    } else if (action.type === 'attendance') {
+      setAttendance(candidate.studentId,candidate.lessonId,action.value,true,10)
+      const names: Record<AttendanceStatus,string> = {present:'Присутствует',absent:'Неявка',excused:'Уважительная причина',late:'Опоздание 10 мин'}
+      setKeyboardFeedback(names[action.value]+' · '+visibleStudents[row].name)
+    }
+    if (autoAdvance) {
+      const next=advanceJournalCell({row,column},visibleStudents.length,visibleLessons.length)
+      setKeyboardCell({studentId:visibleStudents[next.row].id,lessonId:visibleLessons[next.column].id})
+    } else {
+      setKeyboardCell(candidate)
+    }
   }
 
   function addQuickGrade(studentId: string, lessonId: string, value: MarkValue) {
@@ -277,6 +370,9 @@ function App() {
     setRollcallOpen(false)
     setContextMenu(null)
     setAttendanceUndo(null)
+    setKeyboardMode(false)
+    setKeyboardCell(null)
+    setKeyboardFeedback('')
     setSearch('')
     setNotice('')
   }
@@ -350,6 +446,16 @@ function App() {
                   <button className={journalLayout === 'lesson' ? 'chosen' : ''} onClick={() => setJournalLayout('lesson')}><ListChecks size={16}/> По занятию</button>
                   <button className={journalLayout === 'table' ? 'chosen' : ''} onClick={() => setJournalLayout('table')}><Table2 size={16}/> Таблица</button>
                 </div>
+                <div className="keyboard-toolbar">
+                  <button type="button" className={'keyboard-toggle'+(keyboardMode?' enabled':'')} aria-pressed={keyboardMode}
+                    onClick={() => {if(journalLayout!=='table')setJournalLayout('table');toggleKeyboardMode()}}>
+                    <Keyboard size={17}/>{keyboardMode?'Завершить быстрый ввод':'Ввод с клавиатуры'}
+                  </button>
+                  {keyboardMode && <label className="auto-advance-toggle">
+                    <input type="checkbox" checked={autoAdvance} onChange={e=>setAutoAdvance(e.target.checked)}/>
+                    <ArrowDown size={15}/> Автопереход
+                  </label>}
+                </div>
                 {journalLayout === 'lesson' && <label className="focus-lesson-select">
                   <span>Дата занятия</span>
                   <select value={focusLesson?.id ?? ''} onChange={e => setFocusLessonId(e.target.value)}>
@@ -357,7 +463,25 @@ function App() {
                   </select>
                 </label>}
               </div>
-              {journalLayout === 'table' && <div className="table-scroll" tabIndex={0} aria-label="Таблица журнала, прокручивается горизонтально">
+              {keyboardMode && journalLayout==='table' && <div className="keyboard-guide" role="note">
+                <div className="keyboard-guide-main">
+                  <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> переход</span>
+                  <span><kbd>2</kbd>–<kbd>5</kbd> оценка</span>
+                  <span><kbd>N</kbd> неявка</span>
+                  <span><kbd>P</kbd> есть</span>
+                  <span><kbd>U</kbd> уваж.</span>
+                  <span><kbd>L</kbd> опоздал 10 мин</span>
+                  <span><kbd>Z</kbd> зачёт</span>
+                  <span><kbd>X</kbd> незачёт</span>
+                  <span><kbd>Enter</kbd> подробности</span>
+                  <span><kbd>Esc</kbd> выход</span>
+                </div>
+                <div className="keyboard-current" role="status">{keyboardFeedback}</div>
+                <p>Буквенные команды работают и на русской раскладке — по расположению латинских клавиш. Запись выполняется только в этом режиме.</p>
+              </div>}
+              {journalLayout === 'table' && <div className={'table-scroll'+(keyboardMode?' keyboard-active-grid':'')} ref={gridRef} tabIndex={0}
+                onKeyDown={handleJournalKeyDown}
+                aria-label={keyboardMode?'Таблица журнала, включён быстрый ввод с клавиатуры':'Таблица журнала, прокручивается горизонтально'}>
                 <table className="journal-table">
                   <thead><tr><th className="fixed-name">Фамилия и имя</th>{visibleLessons.map(l => <th key={l.id} className={'lesson-column ' + (l.completed ? '' : 'future')} title={l.topic}><button className="lesson-column-action" type="button" onClick={() => openRollcall(l.id)} title={'Перекличка за ' + formatDate(l.date)} aria-label={'Перекличка за ' + formatDate(l.date)}>
                     <span className="lesson-date">{formatDate(l.date)}</span>
@@ -370,11 +494,22 @@ function App() {
                         {visibleLessons.map(l => {
                           const cellGrades=getGrades(student.id,l.id)
                           const attendance=getAttendance(student.id,l.id)
-                          return <td key={l.id} className="grid-cell"><button className={'cell-button ' + (selected?.studentId===student.id && selected?.lessonId===l.id?'cell-active':'')}
-                            onClick={() => {setContextMenu(null);setSelected({studentId:student.id,lessonId:l.id})}}
+                          return <td key={l.id} className="grid-cell"><button
+                            data-student-id={student.id} data-lesson-id={l.id}
+                            className={'cell-button ' +
+                              (keyboardMode && keyboardCell?.studentId===student.id && keyboardCell?.lessonId===l.id?'keyboard-target ':'') +
+                              (selected?.studentId===student.id && selected?.lessonId===l.id?'cell-active':'')}
+                            onClick={() => {
+                              setContextMenu(null)
+                              if(keyboardMode) {
+                                setKeyboardCell({studentId:student.id,lessonId:l.id})
+                                gridRef.current?.focus()
+                              } else setSelected({studentId:student.id,lessonId:l.id})
+                            }}
                             onContextMenu={e => {e.preventDefault();openCellMenu(student.id,l.id,e.clientX,e.clientY)}}
                             onKeyDown={e => {if(e.key==='ContextMenu' || (e.shiftKey && e.key==='F10')){e.preventDefault();const r=e.currentTarget.getBoundingClientRect();openCellMenu(student.id,l.id,r.left+12,r.top+12)}}}
-                            aria-haspopup="dialog" aria-label={'Изменить данные ' + student.name + ' за ' + formatDate(l.date)} title="Левый клик — подробности, правый — быстрые действия">
+                            aria-haspopup="dialog" aria-label={'Изменить данные ' + student.name + ' за ' + formatDate(l.date)}
+                            title={keyboardMode?'Клик — выбрать, цифры 2–5 — оценка, N — неявка, стрелки — переход':'Левый клик — подробности, правый — быстрые действия'}>
                             {policy.personalView !== 'grades' && <span className={'attendance-mini ' + (attendance ? 'att-' + attendance.status : 'att-empty')} title={attendance ? attendanceInfo[attendance.status].label + (attendance.lateMinutes ? ' ' + attendance.lateMinutes + ' мин' : '') : 'Не отмечено'}>{attendance ? attendanceInfo[attendance.status].short : '·'}</span>}
                             {policy.personalView !== 'attendance' && <span className="cell-marks">{cellGrades.length ? cellGrades.map(g => <span key={g.id} className={'mark-badge mark-' + g.source} title={sourceInfo[g.source].label + ' · ' + categoryTitles[g.category]}>{g.value}</span>) : <span className="empty-mark">—</span>}</span>}
                           </button></td>

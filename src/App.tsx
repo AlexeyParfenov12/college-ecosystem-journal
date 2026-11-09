@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertCircle, ArrowDownToLine, BookOpenCheck, BookText, CalendarDays,
-  Check, CheckCircle2, ChevronDown, ClipboardList, CloudDownload, FileSpreadsheet,
-  GraduationCap, Info, LayoutDashboard, MonitorCheck, Pencil, Plus, Printer,
+  CheckCircle2, ChevronDown, ClipboardList, CloudDownload, FileSpreadsheet,
+  GraduationCap, Info, MonitorCheck, Pencil, Plus, Printer,
   RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X,
 } from 'lucide-react'
 import { categoryTitles, createDemoState, defaultPolicy, journals, lessons, students } from './demo'
@@ -126,24 +126,25 @@ function App() {
     const destinationLesson = journalLessons.find(l => l.completed && l.date === '2026-11-05')
       ?? journalLessons.find(l => l.completed)
     if (!destinationLesson) return
-    let added = 0
-    setData(old => {
-      const known = new Set(old.grades.map(g => g.sourceRef).filter(Boolean))
-      const incoming: GradeEntry[] = []
-      groupStudents.slice(0, 6).forEach((student, i) => {
-        const ref = 'lms-sync-demo:' + student.id + ':' + destinationLesson.id
-        if (known.has(ref)) return
-        incoming.push({
-          id: 'import-' + student.id + '-' + destinationLesson.id,
-          studentId: student.id, lessonId: destinationLesson.id, value: i % 3 === 0 ? 'З' : i % 2 === 0 ? '5' : '4',
-          category: 'lms', source: i % 2 === 0 ? 'lms-auto' : 'lms-reviewed', sourceRef: ref,
-          note: 'Демонстрационная синхронизация LMS',
-        })
+    const known = new Set(data.grades.map(g => g.sourceRef).filter(Boolean))
+    const incoming: GradeEntry[] = []
+    groupStudents.slice(0, 6).forEach((student, i) => {
+      const ref = 'lms-sync-demo:' + student.id + ':' + destinationLesson.id
+      if (known.has(ref)) return
+      incoming.push({
+        id: 'import-' + student.id + '-' + destinationLesson.id,
+        studentId: student.id, lessonId: destinationLesson.id, value: i % 3 === 0 ? 'З' : i % 2 === 0 ? '5' : '4',
+        category: 'lms', source: i % 2 === 0 ? 'lms-auto' : 'lms-reviewed', sourceRef: ref,
+        note: 'Демонстрационная синхронизация LMS',
       })
-      added = incoming.length
-      return incoming.length ? { ...old, grades: [...old.grades, ...incoming] } : old
     })
-    setNotice(added ? 'Импортировано ' + added + ' демонстрационных результатов из LMS.' : 'Повторная синхронизация: новых результатов нет.')
+    if (incoming.length) {
+      setData(old => {
+        const refs = new Set(old.grades.map(g => g.sourceRef).filter(Boolean))
+        return { ...old, grades: [...old.grades, ...incoming.filter(g => !refs.has(g.sourceRef))] }
+      })
+    }
+    setNotice(incoming.length ? 'Импортировано ' + incoming.length + ' демонстрационных результатов из LMS.' : 'Повторная синхронизация: новых результатов нет.')
   }
   function resetDemo() {
     if (!window.confirm('Сбросить все демонстрационные изменения и настройки этого браузера?')) return

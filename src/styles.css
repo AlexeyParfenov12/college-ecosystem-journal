@@ -141,3 +141,62 @@
 .keyboard-guide-main{gap:8px}
 .keyboard-guide kbd{min-width:27px;height:28px}
 }
+
+
+/* Journal v2 — gentle row/column guides and a genuinely compact date-paged table. */
+.journal-table thead th.cross-column{background:#e5f2eb!important;color:#1b655c}
+.journal-table tbody tr.cross-row th.fixed-name,
+.journal-table tbody tr.cross-row td{background:#f0f9f3!important}
+.journal-table tbody tr td.cross-column{background:#eaf5ef!important}
+.journal-table tbody tr.cross-row td.cross-intersection{background:#def1e7!important}
+.journal-table tbody tr.cross-row th.fixed-name{color:#126454!important;border-left:3px solid #65b6a1}
+.journal-table tbody tr.cross-row td.summary-cell{background:#ecf6ef!important}
+.context-action.context-delete{color:#a34d45}
+.context-action.context-delete:not(:disabled):hover{background:#fff0ed;border-color:#efc8c4}
+.context-action:disabled{opacity:.4;cursor:not-allowed}
+.mobile-date-pager{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px 16px;
+  margin:0 0 12px;padding:11px 12px;background:#f0f7f2;border:1px solid #dbe9df;border-radius:10px}
+.mobile-date-caption{display:flex;flex-direction:column;gap:3px}
+.mobile-date-caption strong{font-size:11px;color:#285e53}
+.mobile-date-caption small{font-size:10px;color:#8ca497}
+.mobile-date-actions{display:flex;align-items:center;min-width:0;gap:5px}
+.mobile-date-actions button{display:grid;place-items:center;flex:0 0 40px;width:40px;height:42px;
+  border-radius:8px;border:1px solid #cce0d4;background:#fff;color:#1d7560}
+.mobile-date-actions button:disabled{opacity:.4}
+.mobile-date-actions select{min-width:0;max-width:210px;border:1px solid #cce0d4;background:#fff;
+  color:#306357;border-radius:8px;height:42px;padding:0 8px;font-size:11px;font-weight:800}
+@media(min-width:620px) and (max-width:1179px){
+  .journal-table{width:100%;min-width:100%;table-layout:fixed}
+  .journal-table th.fixed-name{width:28%;min-width:0;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+  .journal-table .lesson-column{width:13%;min-width:0}
+  .journal-table .grid-cell{min-width:0}
+  .journal-table .summary-column{width:12%;min-width:0}
+  .journal-table .row-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .journal-table .student-number{margin-right:5px}
+  .journal-table .cell-button{min-width:0}
+}
+@media(max-width:619px){
+  .journal-table{width:100%;min-width:100%;table-layout:fixed}
+  .journal-table th.fixed-name{width:49%;min-width:0;max-width:175px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .journal-table .lesson-column{min-width:0;width:32%}
+  .journal-table .grid-cell{min-width:0}
+  .journal-table .summary-column{min-width:0;width:19%}
+  .journal-table .average-column,.journal-table .average-cell{display:none}
+  .journal-table .row-name{font-size:10px!important}
+  .journal-table .student-number{margin-right:4px}
+  .journal-table .cell-button{min-width:0;min-height:58px;gap:5px;padding:4px 2px}
+  .journal-table .cell-marks{max-width:none;gap:2px}
+  .journal-table .mark-badge{font-size:11px;padding:3px 4px}
+  .journal-table .summary-cell{font-size:12px}
+  .mobile-date-pager{flex-direction:column;align-items:stretch;padding:11px}
+  .mobile-date-actions{width:100%}
+  .mobile-date-actions select{flex:1;max-width:none;width:1px}
+  .journal-table thead th{font-size:10px}
+}
+@media(max-width:360px){
+  .journal-table th.fixed-name{width:49%;padding:8px 4px}
+  .journal-table .student-number{display:none}
+  .journal-table .lesson-column{width:32%}
+}
+@media print{.mobile-date-pager{display:none!important}}

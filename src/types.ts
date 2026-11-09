@@ -57,5 +57,5 @@ export interface DemoState {
   attendance: AttendanceEntry[]
   policies: Record<string, GradingPolicy>
 }
-export type Section = 'journal' | 'plan' | 'attestation' | 'reports' | 'settings'
+export type Section = 'journal' | 'plan' | 'attestation' | 'analytics' | 'reports' | 'settings'
 export type ReportKind = 'full' | 'grades' | 'attendance' | 'attestation' | 'plan'

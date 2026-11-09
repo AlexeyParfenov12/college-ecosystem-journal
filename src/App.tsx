@@ -4,7 +4,7 @@ import {
   AlertCircle, ArrowDownToLine, BookOpenCheck, BookText, CalendarDays,
   CheckCircle2, ChevronDown, ClipboardList, CloudDownload, FileSpreadsheet,
   GraduationCap, Info, MonitorCheck, Pencil, Plus, Printer,
-  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound, Keyboard, ArrowDown, ChevronLeft, ChevronRight, Paintbrush,
+  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound, Keyboard, ArrowDown, ChevronLeft, ChevronRight, Paintbrush, Target,
 } from 'lucide-react'
 import { categoryTitles, createDemoState, defaultPolicy, journals, lessons, students } from './demo'
 import { summarizeStudent } from './calculations'
@@ -16,6 +16,7 @@ import { advanceJournalCell, interpretJournalKey, moveJournalCell } from './keyb
 import { removeLastManualGrade } from './gradeActions'
 import { BrushPanel } from './BrushPanel'
 import { FeaturedLesson } from './FeaturedLesson'
+import { AnalyticsPanel } from './AnalyticsPanel'
 import { applyBrush, brushKey, pickFeaturedLesson, undoBrush } from './brush'
 import type { BrushTarget, BrushTool, BrushChange } from './brush'
 import type {
@@ -29,6 +30,7 @@ const menu: { id: Section; title: string; subtitle: string; icon: ReactNode }[] 
   { id: 'journal', title: 'Журнал', subtitle: 'Оценки и посещаемость', icon: <BookOpenCheck size={18} /> },
   { id: 'plan', title: 'Программа и КТП', subtitle: 'Темы и учебные часы', icon: <BookText size={18} /> },
   { id: 'attestation', title: 'Аттестация', subtitle: 'Предварительные итоги', icon: <GraduationCap size={18} /> },
+  { id: 'analytics', title: 'Аналитика', subtitle: 'Прогноз и подсказки', icon: <Target size={18} /> },
   { id: 'reports', title: 'Ведомости и экспорт', subtitle: 'CSV, печать, PDF', icon: <FileSpreadsheet size={18} /> },
   { id: 'settings', title: 'Настройки журнала', subtitle: 'Конструктор оценивания', icon: <Settings2 size={18} /> },
 ]
@@ -64,6 +66,7 @@ function App() {
   const [data, setData] = useState<DemoState>(() => loadDemoState())
   const [journalId, setJournalId] = useState(journals[0].id)
   const [section, setSection] = useState<Section>('journal')
+  const [forecastStudentId, setForecastStudentId] = useState<string | undefined>(undefined)
   const [period, setPeriod] = useState('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<SelectedCell | null>(null)
@@ -543,6 +546,7 @@ function App() {
   }
   function changeJournal(id: string) {
     setJournalId(id)
+    setForecastStudentId(undefined)
     const lastLesson = [...lessons].reverse().find(l => l.journalId === id && l.completed)?.id
       ?? lessons.find(l => l.journalId === id)?.id ?? ''
     setFocusLessonId(lastLesson)
@@ -603,7 +607,7 @@ function App() {
             <div className="kpi"><span className="kpi-icon green"><ClipboardList size={18}/></span><div><span>Проведено часов</span><strong>{completedHours} <em>/ {journal.plannedHours}</em></strong><div className="micro-progress"><i style={{width: Math.min(100, completedHours / journal.plannedHours * 100) + '%'}}/></div></div></div>
             <div className="kpi"><span className="kpi-icon aqua"><CalendarDays size={18}/></span><div><span>Учебных занятий</span><strong>{journalLessons.filter(l => l.completed).length} <em>/ {journalLessons.length}</em></strong><small>В демонстрационном расписании</small></div></div>
             <div className="kpi"><span className="kpi-icon blue"><GraduationCap size={18}/></span><div><span>Обучающихся</span><strong>{groupStudents.length}</strong><small>Вымышленный состав группы</small></div></div>
-            <div className="kpi"><span className="kpi-icon amber"><AlertCircle size={18}/></span><div><span>Мало оценок</span><strong>{attentionCount}</strong><small>Менее трёх учтённых оценок</small></div></div>
+            <div className="kpi"><span className="kpi-icon amber"><AlertCircle size={18}/></span><div><span>Мало оценок</span><strong>{attentionCount}</strong><small>Менее трёх учтённых оценок</small><button className="kpi-inline-link" onClick={()=>setSection('analytics')}>Открыть аналитику</button></div></div>
           </section>
 
           {section === 'journal' && <>
@@ -801,6 +805,21 @@ function App() {
             <div className="bottom-hint"><SlidersHorizontal size={18}/><span>Нужно изменить правила выставления итогов? Настройте шкалы, веса работ и посещаемость.</span><button onClick={() => setSection('settings')}>Настроить журнал</button></div>
           </>}
 
+          {section === 'analytics' && <AnalyticsPanel key={journalId}
+            journal={journal} students={groupStudents} lessons={journalLessons}
+            grades={data.grades} attendance={data.attendance} policy={policy}
+            focusStudentId={forecastStudentId}
+            onOpenStudent={(studentId)=>{
+              const last=[...journalLessons].reverse().find(l=>l.completed) ?? journalLessons[0]
+              setForecastStudentId(studentId)
+              setSection('journal')
+              setJournalLayout('lesson')
+              setPeriod('all')
+              setFocusLessonId(last?.id??'')
+              if(last)setSelected({studentId,lessonId:last.id})
+            }}
+          />}
+
           {section === 'plan' && <section className="content-card">
             <div className="card-header"><div><h2>Календарно-тематический план</h2><p>Темы и факт проведения. Данные демонстрационные, здесь нет редактирования реального КТП.</p></div><span className="quiet-tag">{completedHours} / {journal.plannedHours} ч</span></div>
             <div className="progress-line"><span style={{width:Math.min(100,100*completedHours/journal.plannedHours)+'%'}} /></div>
@@ -873,6 +892,14 @@ function App() {
         <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-heading">
           <div className="drawer-header"><div><div className="eyebrow">РЕДАКТИРОВАНИЕ ЗАНЯТИЯ</div><h2 id="drawer-heading">{activeStudent.name}</h2><p>{formatDate(activeLesson.date)} · {activeLesson.type}</p></div><button className="icon-button" onClick={()=>setSelected(null)} title="Закрыть"><X size={20}/></button></div>
           <div className="drawer-content"><div className="topic-card"><strong>Тема занятия</strong><p>{activeLesson.topic}</p><small>{activeLesson.hours} академических часа · {activeLesson.completed?'Проведено (демо)':'Запланировано'}</small></div>
+            <button className="outline-button drawer-forecast-button"
+              onClick={()=>{
+                setForecastStudentId(activeStudent.id)
+                setSection('analytics')
+                setSelected(null)
+              }}>
+              <Target size={16}/> Прогноз и показатели студента
+            </button>
             <h3>Посещаемость</h3><div className="attendance-actions">{(Object.keys(attendanceInfo) as AttendanceStatus[]).map(status=><button key={status} className={'attendance-button '+(getAttendance(selected.studentId,selected.lessonId)?.status===status?'chosen':'')} onClick={()=>setAttendance(selected.studentId,selected.lessonId,status)}><span>{attendanceInfo[status].short}</span>{attendanceInfo[status].label}</button>)}</div>
             <div className="late-control"><label htmlFor="late-minutes">Минут опоздания</label><input type="number" id="late-minutes" min="1" max="120" value={lateMinutes} onChange={e=>setLateMinutes(Math.min(120,Math.max(1,Number(e.target.value)||1)))}/><button className="text-button" onClick={()=>setAttendance(selected.studentId,selected.lessonId,'late')}>Применить</button></div>
             <div className="drawer-divider"/>

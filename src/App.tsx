@@ -4,7 +4,7 @@ import {
   AlertCircle, ArrowDownToLine, BookOpenCheck, BookText, CalendarDays,
   CheckCircle2, ChevronDown, ClipboardList, CloudDownload, FileSpreadsheet,
   GraduationCap, Info, MonitorCheck, Pencil, Plus, Printer,
-  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound, Keyboard, ArrowDown,
+  RotateCcw, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X, ListChecks, Table2, UsersRound, Keyboard, ArrowDown, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { categoryTitles, createDemoState, defaultPolicy, journals, lessons, students } from './demo'
 import { summarizeStudent } from './calculations'
@@ -13,6 +13,7 @@ import { QuickAttendance } from './QuickAttendance'
 import { CellContextMenu } from './CellContextMenu'
 import { fillMissingPresent } from './quickAttendanceLogic'
 import { advanceJournalCell, interpretJournalKey, moveJournalCell } from './keyboard'
+import { removeLastManualGrade } from './gradeActions'
 import type {
   AttendanceEntry, AttendanceStatus, DemoState, GradeCategory, GradeEntry, GradingPolicy, JournalView,
   MarkValue, ReportKind, Section,
@@ -79,9 +80,27 @@ function App() {
   const [keyboardCell, setKeyboardCell] = useState<SelectedCell | null>(null)
   const [autoAdvance, setAutoAdvance] = useState(true)
   const [keyboardFeedback, setKeyboardFeedback] = useState('')
+  const [keyboardUndo, setKeyboardUndo] = useState<{before:DemoState;cell:SelectedCell;journalId:string}|null>(null)
+  const [hoveredCell, setHoveredCell] = useState<SelectedCell|null>(null)
+  const [lastCell, setLastCell] = useState<SelectedCell|null>(null)
+  const [screenBand, setScreenBand] = useState<'phone'|'tablet'|'desktop'>(() => {
+    if (typeof window==='undefined') return 'desktop'
+    return window.innerWidth<620?'phone':window.innerWidth<1180?'tablet':'desktop'
+  })
+  const [dateStart, setDateStart] = useState(0)
   const gridRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { saveDemoState(data) }, [data])
+  useEffect(() => {
+    const resize=()=>setScreenBand(window.innerWidth<620?'phone':window.innerWidth<1180?'tablet':'desktop')
+    window.addEventListener('resize',resize)
+    return ()=>window.removeEventListener('resize',resize)
+  },[])
+  useEffect(() => {
+    const filtered=lessons.filter(l=>l.journalId===journalId && (period==='all' || l.date.slice(0,7)===period))
+    const count=screenBand==='phone'?1:screenBand==='tablet'?3:filtered.length
+    setDateStart(Math.max(0,filtered.length-count))
+  },[journalId,period,screenBand])
   useEffect(() => {
     if (section !== 'journal' || journalLayout !== 'table') {
       setKeyboardMode(false)
@@ -104,6 +123,10 @@ function App() {
   const visibleStudents = groupStudents.filter(s => s.name.toLowerCase().includes(search.trim().toLowerCase()))
   const journalLessons = useMemo(() => lessons.filter(l => l.journalId === journalId), [journalId])
   const visibleLessons = journalLessons.filter(l => period === 'all' || l.date.slice(0, 7) === period)
+  const dateWindowSize=screenBand==='phone'?1:screenBand==='tablet'?3:visibleLessons.length
+  const maxDateStart=Math.max(0,visibleLessons.length-dateWindowSize)
+  const safeDateStart=Math.min(dateStart,maxDateStart)
+  const tableLessons=screenBand==='desktop'?visibleLessons:visibleLessons.slice(safeDateStart,safeDateStart+dateWindowSize)
   const focusLesson = visibleLessons.find(l => l.id === focusLessonId)
     ?? [...visibleLessons].reverse().find(l => l.completed)
     ?? visibleLessons[0]
@@ -119,6 +142,19 @@ function App() {
     data.attendance.find(a => a.studentId === studentId && a.lessonId === lessonId)
   const activeStudent = selected ? groupStudents.find(s => s.id === selected.studentId) : undefined
   const activeLesson = selected ? journalLessons.find(l => l.id === selected.lessonId) : undefined
+  const highlightedCell = keyboardMode ? keyboardCell : hoveredCell ?? selected ?? contextMenu ?? lastCell
+
+  function keepLessonInView(lessonId:string) {
+    if(screenBand==='desktop') return
+    const i=visibleLessons.findIndex(l=>l.id===lessonId)
+    if(i<0)return
+    setDateStart(current=>{
+      const start=Math.min(current,maxDateStart)
+      if(i<start)return i
+      if(i>=start+dateWindowSize)return Math.min(maxDateStart,i-dateWindowSize+1)
+      return start
+    })
+  }
 
   function updatePolicy(patch: Partial<GradingPolicy>) {
     setData(old => ({
@@ -166,75 +202,110 @@ function App() {
   }
 
   function toggleKeyboardMode() {
-    if (keyboardMode) {
+    if(keyboardMode) {
       setKeyboardMode(false)
       setKeyboardFeedback('')
       return
     }
-    if (!visibleStudents.length || !visibleLessons.length) {
-      setNotice('Для быстрого ввода нужно выбрать период со студентами и занятиями.')
+    if(!visibleStudents.length || !visibleLessons.length) {
+      setNotice('Для быстрого ввода выберите занятие и студентов.')
       return
     }
-    const firstLesson = [...visibleLessons].reverse().find(l => l.completed) ?? visibleLessons[0]
+    const first=[...visibleLessons].reverse().find(l=>l.completed) ?? visibleLessons[0]
+    const cell={studentId:visibleStudents[0].id,lessonId:first.id}
     setKeyboardMode(true)
-    setKeyboardCell({ studentId: visibleStudents[0].id, lessonId: firstLesson.id })
+    setKeyboardCell(cell)
+    keepLessonInView(first.id)
     setSelected(null)
     setContextMenu(null)
-    setKeyboardFeedback('Выберите ячейку стрелками или щелчком мыши, затем нажмите оценку или отметку.')
-    window.requestAnimationFrame(() => gridRef.current?.focus())
+    setKeyboardFeedback('Стрелки — выбор ячейки; Н — неявка; 2–5 — оценка; Delete — убрать последнюю ручную оценку.')
+    window.requestAnimationFrame(()=>gridRef.current?.focus())
   }
 
   function handleJournalKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (!keyboardMode || selected || contextMenu || rollcallOpen) return
-    const target = event.target as HTMLElement
-    if (target.closest('input, textarea, select, [contenteditable="true"]')) return
-    // Avoid intercepting keys when a column header or unrelated control is focused.
-    if (target !== event.currentTarget && !target.closest('.cell-button')) return
-    const action = interpretJournalKey(event)
-    if (!action) return
+    if(!keyboardMode || selected || contextMenu || rollcallOpen)return
+    const target=event.target as HTMLElement
+    if(target.closest('input, textarea, select, [contenteditable="true"]'))return
+    if(target!==event.currentTarget && !target.closest('.cell-button'))return
+    const action=interpretJournalKey(event)
+    if(!action)return
     event.preventDefault()
-    if (action.type === 'stop') {
+    if(action.type==='stop') {
       setKeyboardMode(false)
       setKeyboardFeedback('')
       return
     }
-    if (!visibleStudents.length || !visibleLessons.length) return
-    const initial = {
-      studentId: visibleStudents[0].id,
-      lessonId: visibleLessons[0].id,
-    }
-    const candidate = keyboardCell && visibleStudents.some(s=>s.id===keyboardCell.studentId)
-      && visibleLessons.some(l=>l.id===keyboardCell.lessonId)
-      ? keyboardCell : initial
-    const row = Math.max(0,visibleStudents.findIndex(s=>s.id===candidate.studentId))
-    const column = Math.max(0,visibleLessons.findIndex(l=>l.id===candidate.lessonId))
-    if (action.type === 'move') {
-      const next = moveJournalCell({row,column},action.direction,visibleStudents.length,visibleLessons.length)
-      setKeyboardCell({studentId:visibleStudents[next.row].id,lessonId:visibleLessons[next.column].id})
-      return
-    }
-    if (action.type === 'details') {
-      setSelected(candidate)
-      return
-    }
-    if (action.type === 'grade') {
-      if ((action.value==='З'||action.value==='НЗ') ? !policy.passEnabled : !policy.numericEnabled) {
-        setKeyboardFeedback('Эта шкала отключена в настройках выбранного журнала.')
+    if(action.type==='undo') {
+      if(!keyboardUndo || keyboardUndo.journalId!==journalId) {
+        setKeyboardFeedback('Нет действия для отмены')
         return
       }
-      addQuickGrade(candidate.studentId,candidate.lessonId,action.value)
-      setKeyboardFeedback('Добавлена оценка '+action.value+' · '+visibleStudents[row].name)
-    } else if (action.type === 'attendance') {
-      setAttendance(candidate.studentId,candidate.lessonId,action.value,true,10)
-      const names: Record<AttendanceStatus,string> = {present:'Присутствует',absent:'Неявка',excused:'Уважительная причина',late:'Опоздание 10 мин'}
+      setData(keyboardUndo.before)
+      setKeyboardCell(keyboardUndo.cell)
+      keepLessonInView(keyboardUndo.cell.lessonId)
+      setKeyboardUndo(null)
+      setKeyboardFeedback('Последнее изменение отменено')
+      setNotice('Последнее действие быстрого ввода отменено.')
+      return
+    }
+    if(!visibleStudents.length || !visibleLessons.length)return
+    const initial={studentId:visibleStudents[0].id,lessonId:visibleLessons[0].id}
+    const cell=keyboardCell && visibleStudents.some(x=>x.id===keyboardCell.studentId)
+      && visibleLessons.some(x=>x.id===keyboardCell.lessonId) ? keyboardCell : initial
+    const row=Math.max(0,visibleStudents.findIndex(x=>x.id===cell.studentId))
+    const column=Math.max(0,visibleLessons.findIndex(x=>x.id===cell.lessonId))
+    if(action.type==='move') {
+      const next=moveJournalCell({row,column},action.direction,visibleStudents.length,visibleLessons.length)
+      const lesson=visibleLessons[next.column]
+      setKeyboardCell({studentId:visibleStudents[next.row].id,lessonId:lesson.id})
+      keepLessonInView(lesson.id)
+      return
+    }
+    if(action.type==='details') {
+      setSelected(cell)
+      return
+    }
+    if(action.type==='delete') {
+      deleteManualGrade(cell.studentId,cell.lessonId)
+      // Keep focus on this cell when removing a grade.
+      return
+    }
+    if(action.type==='grade') {
+      if((action.value==='З'||action.value==='НЗ')?!policy.passEnabled:!policy.numericEnabled) {
+        setKeyboardFeedback('Эта шкала отключена в настройках журнала.')
+        return
+      }
+      setKeyboardUndo({before:data,cell,journalId})
+      addQuickGrade(cell.studentId,cell.lessonId,action.value)
+      setKeyboardFeedback('Оценка '+action.value+' · '+visibleStudents[row].name)
+    } else if(action.type==='attendance') {
+      setKeyboardUndo({before:data,cell,journalId})
+      setAttendance(cell.studentId,cell.lessonId,action.value,true,10)
+      const names:Record<AttendanceStatus,string>={
+        present:'Присутствует',absent:'Неявка',excused:'Уважительная причина',late:'Опоздание 10 минут',
+      }
       setKeyboardFeedback(names[action.value]+' · '+visibleStudents[row].name)
     }
-    if (autoAdvance) {
+    if(autoAdvance) {
       const next=advanceJournalCell({row,column},visibleStudents.length,visibleLessons.length)
-      setKeyboardCell({studentId:visibleStudents[next.row].id,lessonId:visibleLessons[next.column].id})
-    } else {
-      setKeyboardCell(candidate)
+      const lesson=visibleLessons[next.column]
+      setKeyboardCell({studentId:visibleStudents[next.row].id,lessonId:lesson.id})
+      keepLessonInView(lesson.id)
+    } else setKeyboardCell(cell)
+  }
+
+  function deleteManualGrade(studentId:string,lessonId:string) {
+    const preview=removeLastManualGrade(data.grades,studentId,lessonId)
+    if (!preview.removed) {
+      setNotice('Ручных оценок для удаления нет. Оценки из LMS не удаляются быстрыми действиями.')
+      setKeyboardFeedback('Нет ручной оценки для удаления')
+      return false
     }
+    setKeyboardUndo({before:data,cell:{studentId,lessonId},journalId})
+    setData(old=>({...old,grades:removeLastManualGrade(old.grades,studentId,lessonId).grades}))
+    setNotice('Ручная оценка '+preview.removed.value+' удалена. Ctrl+Z в режиме ввода отменяет действие.')
+    setKeyboardFeedback('Удалена ручная оценка '+preview.removed.value)
+    return true
   }
 
   function addQuickGrade(studentId: string, lessonId: string, value: MarkValue) {
@@ -270,8 +341,13 @@ function App() {
     setNotice('Оценка добавлена. Данные сохранены только в этом браузере.')
   }
   function removeGrade(id: string) {
+    const grade=data.grades.find(g=>g.id===id)
+    if(!grade || grade.source!=='manual') {
+      setNotice('Результаты LMS не удаляются вручную: редактировать нужно исходное задание.')
+      return
+    }
     setData(old => ({ ...old, grades: old.grades.filter(g => g.id !== id) }))
-    setNotice('Демонстрационная оценка удалена.')
+    setNotice('Ручная оценка удалена.')
   }
   function importLms() {
     const destinationLesson = journalLessons.find(l => l.completed && l.date === '2026-11-05')
@@ -372,6 +448,9 @@ function App() {
     setAttendanceUndo(null)
     setKeyboardMode(false)
     setKeyboardCell(null)
+    setKeyboardUndo(null)
+    setLastCell(null)
+    setHoveredCell(null)
     setKeyboardFeedback('')
     setSearch('')
     setNotice('')

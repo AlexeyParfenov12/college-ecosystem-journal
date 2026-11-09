@@ -600,10 +600,26 @@ function App() {
           </section>
 
           {section === 'journal' && <>
+            <FeaturedLesson featured={featuredLesson} journal={journal} students={groupStudents}
+              attendance={data.attendance} grades={data.grades}
+              onRollcall={()=>featuredLesson && openRollcall(featuredLesson.lesson.id)}
+              onBrush={()=>openBrush(featuredLesson?.lesson.id)}
+              onView={()=>{
+                if(!featuredLesson)return
+                setFocusLessonId(featuredLesson.lesson.id)
+                setPeriod('all')
+                setJournalLayout('lesson')
+                closeBrush()
+              }}
+            />
             <div className="content-card">
               <div className="card-header">
                 <div><h2>Журнал группы <span>{journal.group}</span></h2><p>Оценки и посещаемость в одном месте. ПК: правый клик на ячейке открывает быстрые действия.</p></div>
                 <div className="journal-header-actions">
+                  <button className="outline-button" onClick={()=>brushMode?closeBrush():openBrush()}
+                    aria-pressed={brushMode}>
+                    <Paintbrush size={17}/>{brushMode?'Завершить кисточку':'Кисточка'}
+                  </button>
                   <button className="primary-button attendance-primary" onClick={() => focusLesson && openRollcall(focusLesson.id)} disabled={!focusLesson}>
                     <UsersRound size={18}/> Быстрая перекличка
                   </button>
@@ -613,7 +629,7 @@ function App() {
               <div className="toolbar">
                 <div className="filter-inline">
                   <label htmlFor="month-filter">Период</label>
-                  <select id="month-filter" value={period} onChange={e => setPeriod(e.target.value)}><option value="all">Все занятия</option><option value="2026-10">Октябрь 2026</option><option value="2026-11">Ноябрь 2026</option></select>
+                  <select id="month-filter" value={period} onChange={e => {setPeriod(e.target.value);setBrushCells([])}}><option value="all">Все занятия</option><option value="2026-10">Октябрь 2026</option><option value="2026-11">Ноябрь 2026</option></select>
                 </div>
                 {journalLayout === 'table' && <label className="search-box"><Search size={16}/><input aria-label="Поиск студента" value={search} onChange={e => setSearch(e.target.value)} placeholder="Найти студента..." /></label>}
                 {journalLayout === 'table' && <div className="segmented" role="group" aria-label="Режим таблицы">
@@ -643,6 +659,19 @@ function App() {
                   </select>
                 </label>}
               </div>
+              {brushMode && journalLayout==='table' && <BrushPanel
+                tool={brushTool} onToolChange={setBrushToolAndClear}
+                cells={brushCells} students={groupStudents} lessons={journalLessons}
+                attendance={data.attendance} policy={policy}
+                currentLessonId={brushLessonId}
+                onCurrentLesson={id=>{setBrushLessonId(id);keepLessonInView(id)}}
+                onSelectAll={selectBrushGroupForLesson}
+                onClear={()=>setBrushCells([])}
+                onApply={applyBrushSelection}
+                onUndo={undoBrushSelection}
+                canUndo={brushUndo?.journalId===journalId}
+                onClose={closeBrush}
+              />}
               {journalLayout==='table' && screenBand!=='desktop' && visibleLessons.length>0 && <div className="mobile-date-pager">
                 <div className="mobile-date-caption">
                   <strong>{screenBand==='phone'?'Дата журнала':'Даты журнала'}</strong>
@@ -697,12 +726,30 @@ function App() {
                           return <td key={l.id} className={'grid-cell'+(highlightedCell?.lessonId===l.id?' cross-column':'') +
                             (highlightedCell?.studentId===student.id&&highlightedCell?.lessonId===l.id?' cross-intersection':'')}><button
                             data-student-id={student.id} data-lesson-id={l.id}
+                            aria-pressed={brushMode ? brushCells.some(c=>c.studentId===student.id&&c.lessonId===l.id):undefined}
+                            onPointerDown={e=>{
+                              lastPointerType.current=e.pointerType
+                              if(brushMode && e.pointerType==='mouse' && e.button===0) {
+                                e.preventDefault()
+                                selectBrushCell({studentId:student.id,lessonId:l.id})
+                              }
+                            }}
+                            onPointerEnter={e=>{
+                              if(brushMode && e.pointerType==='mouse' && e.buttons===1)
+                                selectBrushCell({studentId:student.id,lessonId:l.id},true)
+                            }}
                             className={'cell-button ' +
+                              (brushMode && brushCells.some(c=>c.studentId===student.id&&c.lessonId===l.id)?'brush-pending ':'') +
                               (keyboardMode && keyboardCell?.studentId===student.id && keyboardCell?.lessonId===l.id?'keyboard-target ':'') +
                               (selected?.studentId===student.id && selected?.lessonId===l.id?'cell-active':'')}
                             onMouseEnter={()=>setHoveredCell({studentId:student.id,lessonId:l.id})}
                             onFocus={()=>{if(!keyboardMode)setLastCell({studentId:student.id,lessonId:l.id})}}
-                            onClick={() => {
+                            onClick={e => {
+                              if(brushMode) {
+                                if(lastPointerType.current!=='mouse' || e.detail===0)
+                                  selectBrushCell({studentId:student.id,lessonId:l.id})
+                                return
+                              }
                               setLastCell({studentId:student.id,lessonId:l.id})
                               setContextMenu(null)
                               if(keyboardMode) {
@@ -713,7 +760,9 @@ function App() {
                             onContextMenu={e => {e.preventDefault();setLastCell({studentId:student.id,lessonId:l.id});openCellMenu(student.id,l.id,e.clientX,e.clientY)}}
                             onKeyDown={e => {if(e.key==='ContextMenu' || (e.shiftKey && e.key==='F10')){e.preventDefault();const r=e.currentTarget.getBoundingClientRect();openCellMenu(student.id,l.id,r.left+12,r.top+12)}}}
                             aria-haspopup="dialog" aria-label={'Изменить данные ' + student.name + ' за ' + formatDate(l.date)}
-                            title={keyboardMode?'Выбор ячейки: 2–5 — оценка, Н — неявка, Del — удалить ручную оценку':'Нажмите для подробностей или правой кнопкой для быстрых действий'}>
+                            title={brushMode?'Кисточка: нажмите, чтобы выделить или снять выделение':
+                              keyboardMode?'Выбор ячейки: 2–5 — оценка, Н — неявка, Del — удалить ручную оценку':
+                              'Нажмите для подробностей или правой кнопкой для быстрых действий'}>
                             {policy.personalView !== 'grades' && <span className={'attendance-mini ' + (attendance ? 'att-' + attendance.status : 'att-empty')} title={attendance ? attendanceInfo[attendance.status].label + (attendance.lateMinutes ? ' ' + attendance.lateMinutes + ' мин' : '') : 'Не отмечено'}>{attendance ? attendanceInfo[attendance.status].short : '·'}</span>}
                             {policy.personalView !== 'attendance' && <span className="cell-marks">{cellGrades.length ? cellGrades.map(g => <span key={g.id} className={'mark-badge mark-' + g.source} title={sourceInfo[g.source].label + ' · ' + categoryTitles[g.category]}>{g.value}</span>) : <span className="empty-mark">—</span>}</span>}
                           </button></td>

@@ -542,58 +542,82 @@ function App() {
                   </select>
                 </label>}
               </div>
+              {journalLayout==='table' && screenBand!=='desktop' && visibleLessons.length>0 && <div className="mobile-date-pager">
+                <div className="mobile-date-caption">
+                  <strong>{screenBand==='phone'?'Дата журнала':'Даты журнала'}</strong>
+                  <small>{screenBand==='phone'?'По одной дате без горизонтальной прокрутки':'Три даты одновременно — перелистывайте'} </small>
+                </div>
+                <div className="mobile-date-actions">
+                  <button aria-label="Предыдущая дата" title="Предыдущая дата" disabled={safeDateStart===0}
+                    onClick={()=>setDateStart(v=>Math.max(0,v-1))}><ChevronLeft size={20}/></button>
+                  <select aria-label="Выбрать дату" value={safeDateStart} onChange={e=>setDateStart(Math.min(maxDateStart,Number(e.target.value)))}>
+                    {visibleLessons.map((l,i)=><option key={l.id} value={Math.min(i,maxDateStart)}>
+                      {formatDate(l.date)}{screenBand==='tablet'?' и следующие':''} · {l.type}
+                    </option>)}
+                  </select>
+                  <button aria-label="Следующая дата" title="Следующая дата" disabled={safeDateStart===maxDateStart}
+                    onClick={()=>setDateStart(v=>Math.min(maxDateStart,v+1))}><ChevronRight size={20}/></button>
+                </div>
+              </div>}
               {keyboardMode && journalLayout==='table' && <div className="keyboard-guide" role="note">
                 <div className="keyboard-guide-main">
                   <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> переход</span>
                   <span><kbd>2</kbd>–<kbd>5</kbd> оценка</span>
-                  <span><kbd>N</kbd> неявка</span>
-                  <span><kbd>P</kbd> есть</span>
-                  <span><kbd>U</kbd> уваж.</span>
-                  <span><kbd>L</kbd> опоздал 10 мин</span>
-                  <span><kbd>Z</kbd> зачёт</span>
-                  <span><kbd>X</kbd> незачёт</span>
+                  <span><kbd>Н</kbd> неявка</span>
+                  <span><kbd>П</kbd> есть</span>
+                  <span><kbd>У</kbd> уваж.</span>
+                  <span><kbd>О</kbd> опоздал 10 мин</span>
+                  <span><kbd>З</kbd> зачёт</span>
+                  <span><kbd>Б</kbd> / <kbd>Shift+З</kbd> незачёт</span>
+                  <span><kbd>Del</kbd> убрать ручную оценку</span>
+                  <span><kbd>Ctrl+Z</kbd> отменить</span>
                   <span><kbd>Enter</kbd> подробности</span>
                   <span><kbd>Esc</kbd> выход</span>
                 </div>
                 <div className="keyboard-current" role="status">{keyboardFeedback}</div>
-                <p>Буквенные команды работают и на русской раскладке — по расположению латинских клавиш. Запись выполняется только в этом режиме.</p>
+                <p>Русские клавиши соответствуют смыслу отметок. Раскладка должна быть русской (английские смысловые аналоги тоже работают). Удаляется только последняя ручная оценка, результаты LMS защищены.</p>
               </div>}
               {journalLayout === 'table' && <div className={'table-scroll'+(keyboardMode?' keyboard-active-grid':'')} ref={gridRef} tabIndex={0}
                 onKeyDown={handleJournalKeyDown}
-                aria-label={keyboardMode?'Таблица журнала, включён быстрый ввод с клавиатуры':'Таблица журнала, прокручивается горизонтально'}>
+                onMouseLeave={()=>setHoveredCell(null)}
+                aria-label={keyboardMode?'Таблица журнала, включён быстрый ввод с клавиатуры':'Таблица журнала, даты можно перелистывать'}>
                 <table className="journal-table">
-                  <thead><tr><th className="fixed-name">Фамилия и имя</th>{visibleLessons.map(l => <th key={l.id} className={'lesson-column ' + (l.completed ? '' : 'future')} title={l.topic}><button className="lesson-column-action" type="button" onClick={() => openRollcall(l.id)} title={'Перекличка за ' + formatDate(l.date)} aria-label={'Перекличка за ' + formatDate(l.date)}>
+                  <thead><tr><th className="fixed-name">Фамилия и имя</th>{tableLessons.map(l => <th key={l.id} className={'lesson-column ' + (l.completed ? '' : 'future') + (highlightedCell?.lessonId===l.id?' cross-column':'')} title={l.topic}><button className="lesson-column-action" type="button" onClick={() => openRollcall(l.id)} title={'Перекличка за ' + formatDate(l.date)} aria-label={'Перекличка за ' + formatDate(l.date)}>
                     <span className="lesson-date">{formatDate(l.date)}</span>
                     <span className="lesson-type">{l.type === 'Практика' ? 'ПР' : l.type === 'Лабораторная' ? 'ЛР' : l.type === 'Контрольная' ? 'КР' : 'ЛК'}</span>
-                  </button></th>)}<th className="summary-column">Ср. балл</th><th className="summary-column">Итог*</th></tr></thead>
+                  </button></th>)}<th className="summary-column average-column">Ср. балл</th><th className="summary-column">Итог*</th></tr></thead>
                   <tbody>
                     {visibleStudents.map((student, index) => {
                       const summary = allSummaries[student.id]
-                      return <tr key={student.id}><th className="fixed-name row-name"><span className="student-number">{String(index + 1).padStart(2,'0')}</span>{student.name}</th>
-                        {visibleLessons.map(l => {
+                      return <tr key={student.id} className={highlightedCell?.studentId===student.id?'cross-row':''}><th className="fixed-name row-name"><span className="student-number">{String(index + 1).padStart(2,'0')}</span>{student.name}</th>
+                        {tableLessons.map(l => {
                           const cellGrades=getGrades(student.id,l.id)
                           const attendance=getAttendance(student.id,l.id)
-                          return <td key={l.id} className="grid-cell"><button
+                          return <td key={l.id} className={'grid-cell'+(highlightedCell?.lessonId===l.id?' cross-column':'') +
+                            (highlightedCell?.studentId===student.id&&highlightedCell?.lessonId===l.id?' cross-intersection':'')}><button
                             data-student-id={student.id} data-lesson-id={l.id}
                             className={'cell-button ' +
                               (keyboardMode && keyboardCell?.studentId===student.id && keyboardCell?.lessonId===l.id?'keyboard-target ':'') +
                               (selected?.studentId===student.id && selected?.lessonId===l.id?'cell-active':'')}
+                            onMouseEnter={()=>setHoveredCell({studentId:student.id,lessonId:l.id})}
+                            onFocus={()=>{if(!keyboardMode)setLastCell({studentId:student.id,lessonId:l.id})}}
                             onClick={() => {
+                              setLastCell({studentId:student.id,lessonId:l.id})
                               setContextMenu(null)
                               if(keyboardMode) {
                                 setKeyboardCell({studentId:student.id,lessonId:l.id})
                                 gridRef.current?.focus()
                               } else setSelected({studentId:student.id,lessonId:l.id})
                             }}
-                            onContextMenu={e => {e.preventDefault();openCellMenu(student.id,l.id,e.clientX,e.clientY)}}
+                            onContextMenu={e => {e.preventDefault();setLastCell({studentId:student.id,lessonId:l.id});openCellMenu(student.id,l.id,e.clientX,e.clientY)}}
                             onKeyDown={e => {if(e.key==='ContextMenu' || (e.shiftKey && e.key==='F10')){e.preventDefault();const r=e.currentTarget.getBoundingClientRect();openCellMenu(student.id,l.id,r.left+12,r.top+12)}}}
                             aria-haspopup="dialog" aria-label={'Изменить данные ' + student.name + ' за ' + formatDate(l.date)}
-                            title={keyboardMode?'Клик — выбрать, цифры 2–5 — оценка, N — неявка, стрелки — переход':'Левый клик — подробности, правый — быстрые действия'}>
+                            title={keyboardMode?'Выбор ячейки: 2–5 — оценка, Н — неявка, Del — удалить ручную оценку':'Нажмите для подробностей или правой кнопкой для быстрых действий'}>
                             {policy.personalView !== 'grades' && <span className={'attendance-mini ' + (attendance ? 'att-' + attendance.status : 'att-empty')} title={attendance ? attendanceInfo[attendance.status].label + (attendance.lateMinutes ? ' ' + attendance.lateMinutes + ' мин' : '') : 'Не отмечено'}>{attendance ? attendanceInfo[attendance.status].short : '·'}</span>}
                             {policy.personalView !== 'attendance' && <span className="cell-marks">{cellGrades.length ? cellGrades.map(g => <span key={g.id} className={'mark-badge mark-' + g.source} title={sourceInfo[g.source].label + ' · ' + categoryTitles[g.category]}>{g.value}</span>) : <span className="empty-mark">—</span>}</span>}
                           </button></td>
                         })}
-                        <td className="summary-cell">{summary.gradeAverage === null ? '—' : two(summary.gradeAverage)}</td><td className="summary-cell"><span className={'result-pill ' + (summary.suggestedMark===2?'result-risk':'')}>{summary.suggestedMark ?? '—'}</span></td>
+                        <td className="summary-cell average-cell">{summary.gradeAverage === null ? '—' : two(summary.gradeAverage)}</td><td className="summary-cell"><span className={'result-pill ' + (summary.suggestedMark===2?'result-risk':'')}>{summary.suggestedMark ?? '—'}</span></td>
                       </tr>
                     })}
                   </tbody>
@@ -668,6 +692,8 @@ function App() {
           onClose={()=>setContextMenu(null)}
           onAttendance={status=>{setAttendance(s.id,l.id,status,false,status==='late'?10:undefined);setContextMenu(null)}}
           onMark={value=>addQuickGrade(s.id,l.id,value)}
+          canDeleteManual={data.grades.some(g=>g.studentId===s.id&&g.lessonId===l.id&&g.source==='manual')}
+          onDelete={()=>{deleteManualGrade(s.id,l.id);setContextMenu(null)}}
           onEdit={()=>{setSelected({studentId:s.id,lessonId:l.id});setContextMenu(null)}}
           onRollcall={()=>openRollcall(l.id)}
         />
@@ -693,7 +719,9 @@ function App() {
             <h3>Посещаемость</h3><div className="attendance-actions">{(Object.keys(attendanceInfo) as AttendanceStatus[]).map(status=><button key={status} className={'attendance-button '+(getAttendance(selected.studentId,selected.lessonId)?.status===status?'chosen':'')} onClick={()=>setAttendance(selected.studentId,selected.lessonId,status)}><span>{attendanceInfo[status].short}</span>{attendanceInfo[status].label}</button>)}</div>
             <div className="late-control"><label htmlFor="late-minutes">Минут опоздания</label><input type="number" id="late-minutes" min="1" max="120" value={lateMinutes} onChange={e=>setLateMinutes(Math.min(120,Math.max(1,Number(e.target.value)||1)))}/><button className="text-button" onClick={()=>setAttendance(selected.studentId,selected.lessonId,'late')}>Применить</button></div>
             <div className="drawer-divider"/>
-            <h3>Оценки за занятие</h3><div className="grade-list">{getGrades(selected.studentId,selected.lessonId).length===0?<p className="empty-muted">Оценок пока нет.</p>:getGrades(selected.studentId,selected.lessonId).map(g=><div className="grade-row" key={g.id}><span className={'large-mark mark-'+g.source}>{g.value}</span><div><strong>{categoryTitles[g.category]}</strong><small><IconChip source={g.source}/> {sourceInfo[g.source].label}</small>{g.note&&<small>{g.note}</small>}</div><button className="icon-button delete" title="Удалить демонстрационную оценку" onClick={()=>removeGrade(g.id)}><Trash2 size={16}/></button></div>)}</div>
+            <h3>Оценки за занятие</h3><div className="grade-list">{getGrades(selected.studentId,selected.lessonId).length===0?<p className="empty-muted">Оценок пока нет.</p>:getGrades(selected.studentId,selected.lessonId).map(g=><div className="grade-row" key={g.id}><span className={'large-mark mark-'+g.source}>{g.value}</span><div><strong>{categoryTitles[g.category]}</strong><small><IconChip source={g.source}/> {sourceInfo[g.source].label}</small>{g.note&&<small>{g.note}</small>}</div><button className="icon-button delete" disabled={g.source!=='manual'}
+              title={g.source==='manual'?'Удалить ручную оценку':'Оценка из LMS: удаление через источник'}
+              onClick={()=>removeGrade(g.id)}><Trash2 size={16}/></button></div>)}</div>
             <h3>Добавить оценку</h3><div className="mark-picker">{marks.map(mark=><button key={mark} disabled={(mark==='З'||mark==='НЗ')?!policy.passEnabled:!policy.numericEnabled} className={draftMark===mark?'picked':''} onClick={()=>setDraftMark(mark)}>{mark}</button>)}</div>
             <label className="field-label" htmlFor="grade-category">Вид работы</label><select className="wide-select" id="grade-category" value={draftCategory} onChange={e=>setDraftCategory(e.target.value as GradeCategory)}>{(Object.keys(categoryTitles) as GradeCategory[]).map(c=><option key={c} value={c}>{categoryTitles[c]}</option>)}</select>
             <label className="field-label" htmlFor="grade-note">Комментарий (необязательно)</label><textarea id="grade-note" rows={2} value={draftNote} onChange={e=>setDraftNote(e.target.value)} placeholder="Например, ответ у доски"/>

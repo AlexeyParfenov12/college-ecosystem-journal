@@ -62,8 +62,8 @@ export function applyBrush(
       const index = attendance.findIndex(a => a.studentId === cell.studentId && a.lessonId === cell.lessonId)
       const before = index < 0 ? null : attendance[index]
       if (before && sameAttendance(before, after)) { skipped++; continue }
-      if (before) { attendance.splice(index, 1); overwrittenAttendance++ }
-      attendance.push(after)
+      if (before) { attendance[index] = after; overwrittenAttendance++ }
+      else attendance.push(after)
       changes.push({ kind: 'attendance', before, after })
       changedAttendance++
     }
@@ -87,8 +87,8 @@ export function undoBrush(state: DemoState, changes: BrushChange[]): DemoState {
     if (change.kind !== 'attendance') continue
     const index = attendance.findIndex(a => a.studentId === change.after.studentId && a.lessonId === change.after.lessonId)
     if (index < 0 || !sameAttendance(attendance[index], change.after)) continue
-    attendance.splice(index, 1)
-    if (change.before) attendance.push(change.before)
+    if (change.before) attendance[index] = change.before
+    else attendance.splice(index, 1)
   }
   return { ...state, grades, attendance }
 }
